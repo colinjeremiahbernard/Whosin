@@ -2,9 +2,13 @@
 
 > **Who’s in? Let’s play.**
 
-Whosin is a browser-based, real-time multiplayer game platform designed for spontaneous group play.
+Whosin is a browser-based, real-time multiplayer game designed for spontaneous group play.
 
-One person creates a game, receives a short room code, and shares it with the group. Everyone joins from their own phone, tablet, or laptop using a browser. No account. No app download. No installation.
+One person creates a game, receives a short room code, and shares it with the group. Everyone joins from their own phone, tablet, or laptop using a browser.
+
+No account.  
+No app download.  
+No installation.
 
 The same public Whosin URL can be used again and again for new games.
 
@@ -33,27 +37,27 @@ The product should feel closer to joining a conversation than installing and con
 
 # 2. Core Principles
 
-### Zero friction
+## Zero Friction
 
 No account creation, passwords, downloads, or app installation.
 
-### Real-time
+## Real-Time
 
 The game state must remain synchronized across every connected device.
 
-### Room-based
+## Room-Based
 
 Every game exists inside a temporary room identified by a short human-readable code.
 
-### Host-controlled
+## Host-Controlled
 
 One player acts as the host and controls game progression.
 
-### Replayable
+## Replayable
 
 Finishing a game should naturally lead into another game.
 
-### Device agnostic
+## Device Agnostic
 
 The experience must work well on:
 
@@ -64,13 +68,13 @@ The experience must work well on:
 - Mac laptops
 - Desktop browsers
 
-### Mobile first
+## Mobile First
 
 Most players will probably hold their phones while playing together in the same physical space.
 
-### Simple to understand
+## Simple to Understand
 
-Players should be able to join and begin playing without instructions from the host.
+Players should be able to join and begin playing without technical knowledge or lengthy instructions.
 
 ---
 
@@ -80,7 +84,7 @@ Players should be able to join and begin playing without instructions from the h
 
 **Whosin**
 
-## Brand idea
+## Brand Idea
 
 The name comes from:
 
@@ -88,11 +92,11 @@ The name comes from:
 
 It represents the social action required to start a game: getting people into the room.
 
-## Primary tagline
+## Primary Tagline
 
 **Who’s in? Let’s play.**
 
-## Brand vocabulary
+## Brand Vocabulary
 
 Use natural language throughout the interface:
 
@@ -106,14 +110,7 @@ Use natural language throughout the interface:
 - Play Again
 - Leave Game
 
-Avoid unnecessarily technical terminology such as:
-
-- Session ID
-- WebSocket connection
-- Authentication token
-- Lobby instance
-
-Those concepts belong in the architecture, not the player experience.
+Avoid unnecessary technical terminology in the player experience.
 
 ---
 
@@ -121,16 +118,16 @@ Those concepts belong in the architecture, not the player experience.
 
 The first release must provide a complete playable multiplayer experience.
 
-## Required MVP functionality
+## Required MVP Functionality
 
-### Landing page
+### Landing Page
 
 Players can:
 
 - Create a game
 - Join an existing game
 
-### Create game
+### Create Game
 
 The creator becomes the host.
 
@@ -143,11 +140,11 @@ WHOSIN
 
 Create a Game
 
-Room code:
+Room Code:
 7K4P
 ```
 
-### Join game
+### Join Game
 
 A player enters:
 
@@ -196,7 +193,7 @@ Players see:
 
 - Round result
 - Current scores
-- Winner/leader information where applicable
+- Final result where applicable
 - Next-round control
 
 ### Replay
@@ -207,30 +204,30 @@ The host can start another game without requiring everyone to leave and reconnec
 
 # 5. Game Design
 
-Whosin is initially a **game platform shell plus a defined multiplayer game mode**.
+Whosin consists of a reusable multiplayer room platform and one or more game modes.
 
-The architecture must separate the game engine from the room system so additional game modes can be introduced later.
+The architecture must separate the room system from the game engine so additional games can be introduced later.
 
-## Game engine requirements
+## Game Engine Requirements
 
-A game mode should be able to define:
+A game mode should define:
 
 ```text
-Game configuration
-    ↓
+Game Configuration
+        ↓
 Rounds
-    ↓
-Player actions
-    ↓
+        ↓
+Player Actions
+        ↓
 Validation
-    ↓
+        ↓
 Scoring
-    ↓
-Round result
-    ↓
-Next round
-    ↓
-Final result
+        ↓
+Round Result
+        ↓
+Next Round
+        ↓
+Final Result
 ```
 
 The room system should not need to understand the individual rules of every game.
@@ -257,7 +254,7 @@ Room
 └── Created At
 ```
 
-## Room states
+## Room States
 
 ```text
 LOBBY
@@ -303,7 +300,7 @@ I
 1
 ```
 
-Example:
+Examples:
 
 ```text
 7K4P
@@ -311,9 +308,7 @@ M8RX
 T6QD
 ```
 
-Room codes must be unique among currently active rooms.
-
-They do not need to be globally permanent.
+Room codes only need to be unique among active rooms.
 
 ---
 
@@ -326,7 +321,7 @@ A player receives a temporary identity when joining a room.
 Example:
 
 ```text
-playerId = random UUID
+playerId = UUID
 ```
 
 The player also has:
@@ -356,92 +351,36 @@ The server, rather than the client, must enforce host permissions.
 
 If the host disconnects, the system should support host reassignment.
 
-Recommended behavior:
+Recommended initial behavior:
 
 > Automatically promote the longest-connected remaining player.
 
-The new host receives the host controls.
-
 ---
 
-# 10. Real-Time Architecture
+# 10. Technology Stack
 
-Whosin requires server-authoritative real-time communication.
-
-Recommended architecture:
-
-```text
-                  ┌───────────────────┐
-                  │   Web Browser     │
-                  │                   │
-                  │ React Application │
-                  └─────────┬─────────┘
-                            │
-                       HTTPS / WSS
-                            │
-                  ┌─────────▼─────────┐
-                  │   Application     │
-                  │      Server       │
-                  │                   │
-                  │ Room Manager      │
-                  │ Game Engine       │
-                  │ Event Manager     │
-                  └───────┬─┬─────────┘
-                          │ │
-                 ┌────────┘ └────────┐
-                 │                   │
-        ┌────────▼────────┐  ┌───────▼────────┐
-        │     Redis       │  │   PostgreSQL   │
-        │                 │  │                │
-        │ Live room state │  │ Persistent     │
-        │ Pub/Sub         │  │ data           │
-        └─────────────────┘  └────────────────┘
-```
-
----
-
-# 11. Recommended Technology Stack
+Whosin will use a **C++-centered backend architecture**.
 
 ## Frontend
 
-**Next.js + React + TypeScript**
+The browser client will initially use:
 
-Reasons:
+- HTML
+- CSS
+- JavaScript
 
-- Strong component architecture
-- Excellent responsive-web support
-- TypeScript across the application
-- Easy deployment
-- Good performance
-- Suitable for a public consumer-facing URL
+The frontend should remain lightweight and framework-independent during the initial build.
 
-## Styling
-
-**Tailwind CSS**
-
-Used for:
-
-- Responsive layouts
-- Design consistency
-- Mobile-first development
-- Rapid UI iteration
-
-## Real-time communication
-
-**WebSockets**
-
-The preferred implementation can use Socket.IO or an equivalent managed WebSocket infrastructure.
-
-The important architectural requirement is:
-
-> The server is authoritative and clients receive state updates through a real-time connection.
+A frontend framework can be introduced later if the application complexity justifies it.
 
 ## Backend
 
-**Node.js + TypeScript**
+**C++20**
 
-The backend contains:
+The C++ server will contain:
 
+- HTTP handling
+- WebSocket connections
 - Room management
 - Player management
 - Game state
@@ -449,33 +388,118 @@ The backend contains:
 - Validation
 - Scoring
 - Host permissions
-- Real-time events
+- Timers
+- Reconnection handling
+
+## Build System
+
+**CMake**
+
+CMake will manage:
+
+- C++ compilation
+- Dependencies
+- Development builds
+- Test builds
+- Production builds
+
+## Real-Time Communication
+
+**WebSocket**
+
+WebSockets provide persistent, bidirectional communication between:
+
+```text
+Browser ↔ C++ Game Server
+```
 
 ## Database
 
 **PostgreSQL**
 
-Used for durable data such as:
+PostgreSQL will be used for durable data such as:
 
 - Game metadata
 - Completed game records
 - Scores where persistence is required
-- Analytics
-- Future user/account functionality
+- Future analytics
+- Future account functionality
 
-## Live state
+## Ephemeral State
 
-**Redis**
+The initial development version should keep active room state in the C++ server.
 
-Used for:
+**Redis is not required for the first local implementation.**
 
-- Active rooms
-- Temporary game state
+Redis can be introduced later for:
+
+- Distributed room state
 - Pub/Sub
-- Distributed real-time coordination
-- Expiration of abandoned rooms
+- Multi-server synchronization
+- Horizontal scaling
+- Room expiration
 
-Not every piece of temporary game state needs to be written to PostgreSQL.
+This prevents unnecessary infrastructure from being introduced before it is needed.
+
+---
+
+# 11. High-Level Architecture
+
+```text
+                         INTERNET
+                            │
+                            ▼
+                   ┌──────────────────┐
+                   │     Browser      │
+                   │                  │
+                   │ HTML             │
+                   │ CSS              │
+                   │ JavaScript       │
+                   └────────┬─────────┘
+                            │
+                         HTTPS
+                            │
+                         WSS
+                            │
+                   ┌────────▼─────────┐
+                   │   C++20 Server   │
+                   │                  │
+                   │ HTTP Server      │
+                   │ WebSocket Server │
+                   │ Room Manager     │
+                   │ Game Engine      │
+                   │ Player Manager   │
+                   │ Validation       │
+                   │ Scoring          │
+                   └────────┬─────────┘
+                            │
+                     ┌──────▼──────┐
+                     │ PostgreSQL  │
+                     │             │
+                     │ Durable     │
+                     │ Game Data   │
+                     └─────────────┘
+```
+
+Future scaling:
+
+```text
+                         INTERNET
+                            │
+                            ▼
+                     Load Balancer
+                            │
+              ┌─────────────┼─────────────┐
+              │             │             │
+              ▼             ▼             ▼
+         C++ Server A  C++ Server B  C++ Server C
+              │             │             │
+              └─────────────┼─────────────┘
+                            │
+                           Redis
+                            │
+                       PostgreSQL
+```
 
 ---
 
@@ -483,13 +507,13 @@ Not every piece of temporary game state needs to be written to PostgreSQL.
 
 The client must never be trusted to determine important game outcomes.
 
-For example, the client may request:
+For example, the browser may send:
 
 ```text
 SUBMIT_ANSWER
 ```
 
-The server decides:
+The server determines:
 
 ```text
 Is the player in the room?
@@ -500,74 +524,104 @@ What score should be awarded?
 Has the round completed?
 ```
 
-Then the server broadcasts the resulting state.
+The server then updates the game state and broadcasts the result.
 
-This prevents:
+This protects against:
 
 - Score manipulation
 - Duplicate submissions
 - Invalid actions
-- Client-side timer cheating
+- Client-side timer manipulation
 - Host permission bypasses
 
 ---
 
-# 13. Event Architecture
+# 13. WebSocket Architecture
 
-The real-time protocol should use explicit events.
+The WebSocket connection is the primary real-time channel.
 
-Example client → server events:
+## Client → Server
+
+Example events:
 
 ```text
-room:create
-room:join
-room:leave
-game:start
-game:action
-game:next
-game:replay
+room.create
+room.join
+room.leave
+
+game.start
+game.action
+game.next
+game.replay
+game.end
 ```
 
-Example server → client events:
+## Server → Client
+
+Example events:
 
 ```text
-room:created
-room:updated
-player:joined
-player:left
-game:started
-game:state
-game:actionAccepted
-game:roundComplete
-game:finished
-host:changed
+room.created
+room.updated
+
+player.joined
+player.left
+
+game.started
+game.state
+game.actionAccepted
+game.roundComplete
+game.finished
+
+host.changed
+
 error
 ```
 
-The exact protocol can evolve during implementation.
+The protocol should use structured JSON initially.
+
+Example:
+
+```json
+{
+  "type": "room.join",
+  "payload": {
+    "roomCode": "7K4P",
+    "displayName": "Colin"
+  }
+}
+```
+
+The exact event names and payload schemas may evolve during implementation.
 
 ---
 
 # 14. Game State
 
-A representative server state:
+A representative server-side state:
 
-```typescript
+```cpp
 GameState {
-  roomCode: string
-  status: GameStatus
-  hostId: string
-  players: Player[]
-  currentRound: number
-  totalRounds: number
-  roundStartedAt: number
-  roundEndsAt: number
-  scores: Record<string, number>
-  roundData: unknown
-}
+    RoomCode roomCode;
+    GameStatus status;
+
+    PlayerId hostId;
+
+    std::vector<Player> players;
+
+    int currentRound;
+    int totalRounds;
+
+    Timestamp roundStartedAt;
+    Timestamp roundEndsAt;
+
+    std::unordered_map<PlayerId, int> scores;
+
+    GameData gameData;
+};
 ```
 
-The actual implementation should use strict TypeScript types rather than unrestricted objects wherever possible.
+The actual implementation should use strongly typed C++ structures rather than loosely typed data wherever practical.
 
 ---
 
@@ -575,28 +629,19 @@ The actual implementation should use strict TypeScript types rather than unrestr
 
 Timers must be server-authoritative.
 
-Do not rely on each browser independently counting down from a local timer.
-
-Instead, the server provides:
-
-```text
-roundEndsAt
-```
-
-Clients calculate the remaining display time using the synchronized server state.
+The server maintains the authoritative round deadline.
 
 Example:
 
 ```text
 roundEndsAt = 12:35:20.000
-
-Client:
-remaining = roundEndsAt - currentServerAdjustedTime
 ```
 
-This prevents clients from drifting apart.
+The client receives the deadline and calculates the remaining display time.
 
-When the timer expires, the server determines that the round has ended.
+The server determines when the round has actually ended.
+
+This prevents clients from manipulating or drifting away from the official timer.
 
 ---
 
@@ -606,23 +651,23 @@ Players will inevitably lose connectivity.
 
 Whosin should distinguish between:
 
-### Temporary disconnect
+## Temporary Disconnect
 
 Keep the player in the room for a short grace period.
 
-If they reconnect, restore their session.
+If the player reconnects, restore their session.
 
-### Permanent departure
+## Permanent Departure
 
 Remove the player after the grace period.
 
-### Host disconnect
+## Host Disconnect
 
 Transfer host authority according to the host reassignment rule.
 
-### Empty room
+## Empty Room
 
-If no players remain, the room should eventually expire automatically.
+If no players remain, the room should eventually expire.
 
 ---
 
@@ -640,16 +685,18 @@ Empty room:
 expires after shorter period
 
 Completed game:
-can be retained as historical data if persistence is enabled
+may be persisted as historical data
 ```
 
-Redis TTLs are appropriate for ephemeral room state.
+The initial implementation may use C++ timers for room cleanup.
+
+Redis TTLs can be introduced when distributed deployment is required.
 
 ---
 
 # 18. Database Model
 
-Initial relational model:
+Initial PostgreSQL schema:
 
 ```text
 games
@@ -684,13 +731,15 @@ round_data
 result_data
 ```
 
-The schema should remain flexible enough to support additional game modes.
+The schema should remain flexible enough to support multiple game modes.
 
 ---
 
-# 19. API Boundaries
+# 19. HTTP API
 
-REST endpoints may be used for:
+The C++ server may expose a small HTTP API.
+
+Initial endpoints:
 
 ```text
 GET  /health
@@ -698,64 +747,987 @@ POST /rooms
 GET  /rooms/:code
 ```
 
-Real-time actions should primarily use WebSockets.
+Real-time gameplay actions should primarily use WebSockets.
 
-Avoid creating a large REST API for actions that inherently require real-time synchronization.
-
----
-
-# 20. Frontend Routes
-
-Recommended routes:
-
-```text
-/
-```
-
-Landing page.
-
-```text
-/join
-```
-
-Join a room.
-
-```text
-/room/[code]
-```
-
-Room lobby/game experience.
-
-```text
-/room/[code]/results
-```
-
-Optional dedicated results route if needed.
-
-The actual URL architecture can be simplified if game state is maintained entirely inside `/room/[code]`.
+The REST API should not become a replacement for the real-time protocol.
 
 ---
 
-# 21. Responsive UX
+# 20. Frontend Structure
 
-The application must be designed mobile-first.
+The initial frontend should be simple:
 
-## Mobile priorities
+```text
+apps/
+└── web/
+    ├── index.html
+    ├── join.html
+    ├── room.html
+    ├── css/
+    │   └── styles.css
+    ├── js/
+    │   ├── app.js
+    │   ├── websocket.js
+    │   ├── room.js
+    │   └── game.js
+    └── assets/
+```
 
-The primary gameplay interface should:
+This structure can evolve into a frontend framework later if necessary.
 
-- Fit one-handed use where practical
+---
+
+# 21. C++ Server Structure
+
+Recommended initial structure:
+
+```text
+server/
+├── CMakeLists.txt
+├── include/
+│   ├── server/
+│   ├── room/
+│   ├── player/
+│   ├── game/
+│   └── protocol/
+│
+├── src/
+│   ├── main.cpp
+│   ├── server/
+│   ├── room/
+│   ├── player/
+│   ├── game/
+│   └── protocol/
+│
+└── tests/
+```
+
+The exact library-specific structure will be determined after selecting the C++ networking stack.
+
+---
+
+# 22. C++ Dependency Strategy
+
+Dependencies should be introduced deliberately.
+
+The server requires libraries for:
+
+- HTTP
+- WebSockets
+- JSON
+- PostgreSQL connectivity
+- Testing
+
+Candidate libraries may include established C++ ecosystem solutions such as:
+
+- Boost.Asio / Boost.Beast
+- uWebSockets
+- Crow
+- Drogon
+- nlohmann/json
+- libpq / PostgreSQL client libraries
+
+The final selection should be made during the server-foundation phase based on:
+
+- C++20 compatibility
+- Windows support
+- WebSocket support
+- Documentation
+- Maintenance
+- Performance
+- Build complexity
+- License compatibility
+
+We should **not install every candidate library**.
+
+---
+
+# 23. Security
+
+Even without accounts, the application requires security controls.
+
+Required:
+
+- HTTPS
+- Secure WebSockets
+- Server-side validation
+- Input length limits
+- Display-name sanitization
+- Rate limiting
+- Room-code validation
+- Host permission validation
+- Payload size limits
+- Abuse prevention
+- CORS configuration
+- Security headers
+
+Player input must always be considered untrusted.
+
+---
+
+# 24. Display Names
+
+Display names should have:
+
+- Maximum length
+- Minimum valid length
+- Character validation
+- Sanitization
+
+The browser must never inject raw player input into HTML.
+
+---
+
+# 25. Anti-Cheating
+
+Whosin is intended primarily for social play.
+
+The server must nevertheless control:
+
+- Scores
+- Timers
+- Round completion
+- Valid actions
+- Player membership
+- Host permissions
+
+The client should submit actions, not results.
+
+Bad:
+
+```text
+{
+    "score": 500
+}
+```
+
+Good:
+
+```text
+{
+    "answer": "X"
+}
+```
+
+The C++ game engine calculates the score.
+
+---
+
+# 26. Error Handling
+
+Player-facing errors should be understandable.
+
+Instead of:
+
+```text
+ROOM_NOT_FOUND
+```
+
+show:
+
+> **We couldn't find that room.**  
+> Check the code and try again.
+
+Examples:
+
+> **That room is full.**
+
+> **The game has already started.**
+
+> **You've been disconnected. Reconnecting…**
+
+> **The host has left. Finding a new host…**
+
+Technical details should be logged server-side.
+
+---
+
+# 27. Logging
+
+The C++ server should provide structured logging for:
+
+- Server startup
+- Server shutdown
+- Room creation
+- Room destruction
+- Player joins
+- Player leaves
+- Host changes
+- Game start
+- Game completion
+- Errors
+- WebSocket failures
+
+Do not log unnecessary personal information.
+
+---
+
+# 28. Observability
+
+Production monitoring should eventually include:
+
+```text
+active_rooms
+active_players
+games_started
+games_completed
+average_players_per_game
+average_game_duration
+disconnect_rate
+reconnect_rate
+```
+
+A health endpoint should report whether the server is operational.
+
+---
+
+# 29. Privacy
+
+MVP should collect as little personal information as possible.
+
+No account is required.
+
+Player names should be considered temporary game-session data.
+
+The system should have a clear privacy policy before public launch.
+
+Do not collect:
+
+- Contacts
+- Location
+- Phone numbers
+- Email addresses
+
+unless a future feature explicitly requires them.
+
+---
+
+# 30. Responsive UX
+
+The application must be mobile-first.
+
+## Mobile
+
+The interface should:
+
 - Use large touch targets
 - Avoid tiny text
 - Minimize typing
-- Avoid unnecessary navigation
 - Work in portrait orientation
 - Remain usable on smaller screens
+- Provide clear visual game states
 
 ## Desktop
 
-Desktop layouts can take advantage of:
+Desktop layouts can provide:
 
 - Larger player lists
 - More whitespace
-- Larger game
+- Larger game presentation
+- Additional host controls
+
+The gameplay rules remain identical.
+
+---
+
+# 31. Accessibility
+
+Whosin should target WCAG 2.2 AA principles where practical.
+
+Requirements include:
+
+- Keyboard navigation
+- Visible focus states
+- Sufficient text contrast
+- Semantic HTML
+- Accessible buttons
+- Screen-reader-friendly status changes
+- Reduced-motion consideration
+- Avoiding color as the sole communication method
+
+---
+
+# 32. Testing Strategy
+
+## Unit Tests
+
+Test:
+
+- Game rules
+- Scoring
+- Room-code generation
+- State transitions
+- Validation
+- Timer logic
+
+## Integration Tests
+
+Test:
+
+- Room creation
+- Joining
+- Leaving
+- Host transfer
+- Game start
+- Game progression
+- Reconnection
+
+## End-to-End Tests
+
+Simulate multiple browser clients.
+
+Example:
+
+```text
+Browser A → creates room
+
+Browser B → joins
+
+Browser C → joins
+
+Browser A → starts game
+
+B/C → perform actions
+
+Server → calculates result
+
+All browsers → receive identical state
+```
+
+## Load Testing
+
+Eventually test:
+
+- Many simultaneous rooms
+- Multiple players per room
+- WebSocket connections
+- Reconnection storms
+- Room expiration
+
+---
+
+# 33. Repository Structure
+
+The project will evolve toward:
+
+```text
+Whosin/
+│
+├── README.md
+├── .gitignore
+├── CMakeLists.txt
+│
+├── apps/
+│   └── web/
+│
+├── server/
+│   ├── include/
+│   ├── src/
+│   └── tests/
+│
+├── packages/
+│   ├── protocol/
+│   └── game-engine/
+│
+├── database/
+│   ├── migrations/
+│   └── seeds/
+│
+├── tests/
+│   ├── integration/
+│   └── e2e/
+│
+└── docs/
+```
+
+The initial implementation does not need every directory immediately.
+
+Directories should be created as the corresponding subsystem is introduced.
+
+---
+
+# 34. Git Strategy
+
+The repository should remain clean and incremental.
+
+Each meaningful stage should produce a working commit.
+
+Examples:
+
+```text
+Initial project structure
+Add web client foundation
+Add C++ server foundation
+Add room management
+Add WebSocket protocol
+Add multiplayer lobby
+Add game engine
+Add scoring
+Add replay
+Add production configuration
+```
+
+Avoid large commits containing unrelated changes.
+
+---
+
+# 35. Development Phases
+
+## Phase 1 — Project Foundation
+
+Build:
+
+- Repository structure
+- CMake
+- C++ project
+- Basic web client
+- Development documentation
+
+Deliverable:
+
+> The project builds successfully.
+
+---
+
+## Phase 2 — C++ Server
+
+Build:
+
+- HTTP server
+- Health endpoint
+- Basic server startup/shutdown
+- Configuration
+- Logging
+
+Deliverable:
+
+> The C++ server runs locally and responds to an HTTP health request.
+
+---
+
+## Phase 3 — Web Client
+
+Build:
+
+- Whosin landing page
+- Create Game interface
+- Join Game interface
+- Responsive layout
+
+Deliverable:
+
+> The browser presents the basic Whosin experience.
+
+---
+
+## Phase 4 — WebSockets
+
+Build:
+
+- WebSocket server
+- Client connection
+- Connection lifecycle
+- JSON event protocol
+- Error handling
+
+Deliverable:
+
+> Browser and C++ server communicate in real time.
+
+---
+
+## Phase 5 — Rooms
+
+Build:
+
+- Room creation
+- Room codes
+- Room joining
+- Player identity
+- Lobby
+- Host
+- Player list
+
+Deliverable:
+
+> Multiple browsers can enter the same room and see synchronized players.
+
+---
+
+## Phase 6 — Multiplayer Game Engine
+
+Build:
+
+- Game abstraction
+- Game state
+- Rounds
+- Timers
+- Player actions
+- Validation
+- Scoring
+
+Deliverable:
+
+> Multiple players can complete a full game.
+
+---
+
+## Phase 7 — Results and Replay
+
+Build:
+
+- Round results
+- Final results
+- Play Again
+- Room reset
+- Score handling
+
+Deliverable:
+
+> A group can immediately play another game.
+
+---
+
+## Phase 8 — Resilience
+
+Build:
+
+- Reconnection
+- Disconnect handling
+- Host transfer
+- Room expiration
+- Invalid-action handling
+
+Deliverable:
+
+> Normal connection failures do not destroy the game.
+
+---
+
+## Phase 9 — PostgreSQL
+
+Build:
+
+- Database connection
+- Migrations
+- Game persistence
+- Historical results where appropriate
+
+Deliverable:
+
+> Durable game information can be stored safely.
+
+---
+
+## Phase 10 — Production Hardening
+
+Build:
+
+- HTTPS
+- Secure WebSockets
+- Rate limiting
+- Security headers
+- Monitoring
+- Error tracking
+- Load testing
+- Deployment configuration
+
+Deliverable:
+
+> Whosin is ready for controlled public use.
+
+---
+
+# 36. Definition of Done — MVP
+
+## Entry
+
+- [ ] Public URL loads
+- [ ] Mobile layout works
+- [ ] Desktop layout works
+- [ ] Create Game works
+- [ ] Join Game works
+
+## Rooms
+
+- [ ] Unique room code generated
+- [ ] Players can join
+- [ ] Players see one another
+- [ ] Host is identified
+- [ ] Host can start
+- [ ] Invalid codes are handled
+- [ ] Full/closed rooms are handled
+
+## Game
+
+- [ ] Game state is server-authoritative
+- [ ] Players can perform the required game action
+- [ ] Server validates actions
+- [ ] Timer is synchronized
+- [ ] Scores/results synchronize
+- [ ] All clients receive state changes
+
+## Resilience
+
+- [ ] Player disconnect/reconnect works
+- [ ] Host departure is handled
+- [ ] Empty rooms expire
+- [ ] Invalid actions cannot corrupt state
+
+## Replay
+
+- [ ] Game reaches a final result
+- [ ] Host can initiate another game
+- [ ] Players can continue without manually creating a new room
+
+## Production
+
+- [ ] HTTPS enabled
+- [ ] WebSockets secured
+- [ ] Rate limiting enabled
+- [ ] Errors monitored
+- [ ] Health endpoint available
+- [ ] Production environment variables secured
+
+---
+
+# 37. Future Features
+
+These should not block MVP development.
+
+Potential future capabilities:
+
+## Multiple Game Modes
+
+```text
+Whosin: Trivia
+Whosin: Vote
+Whosin: Bluff
+Whosin: Word
+Whosin: Party
+```
+
+## Custom Games
+
+Hosts could eventually create their own question sets.
+
+## Persistent Profiles
+
+Optional accounts could allow:
+
+- Statistics
+- Achievements
+- Friends
+- Game history
+
+## QR Joining
+
+Players could scan a QR code instead of typing the room code.
+
+## Share Links
+
+Example:
+
+```text
+whosin.example/j/7K4P
+```
+
+## TV / Shared-Screen Mode
+
+One screen displays the main game while each player uses their phone as a controller.
+
+## Game Packs
+
+The platform could eventually support themed content packs.
+
+## Private Rooms
+
+Optional room passwords or invitation links could be introduced.
+
+---
+
+# 38. Product Principles for Future Development
+
+Every feature should be evaluated against four questions.
+
+### Does it make joining easier?
+
+If not, it needs a strong reason to exist.
+
+### Does it make playing together more fun?
+
+Whosin is fundamentally social.
+
+### Does it preserve the no-login/no-install promise?
+
+The default experience should remain frictionless.
+
+### Does it make another round easy?
+
+The product should naturally encourage:
+
+> **“One more game?”**
+
+---
+
+# 39. Launch Experience
+
+The ideal first screen:
+
+```text
+                         WHOSIN
+
+                  Who's in? Let's play.
+
+              ┌─────────────────────────┐
+              │       CREATE GAME        │
+              └─────────────────────────┘
+
+                         or
+
+              ┌─────────────────────────┐
+              │        JOIN GAME         │
+              └─────────────────────────┘
+```
+
+After creating:
+
+```text
+                 YOUR ROOM IS READY
+
+                       7K4P
+
+                Share this code
+                   with friends
+
+                  ● Colin
+                  ● Maya
+                  ● James
+                  ● Sarah
+
+                  [ START GAME ]
+```
+
+The experience should communicate the product's core promise without requiring documentation.
+
+---
+
+# 40. Performance Targets
+
+Initial targets:
+
+- Fast initial page load
+- Responsive interactions
+- Near-immediate room updates
+- Minimal unnecessary network traffic
+- Fast game-action acknowledgement under normal network conditions
+- Graceful behavior on slower mobile connections
+
+The server should be capable of supporting multiple simultaneous rooms without blocking one room's game loop on another.
+
+---
+
+# 41. Browser Support
+
+Target current versions of:
+
+- Chrome
+- Safari
+- Firefox
+- Edge
+
+Primary emphasis:
+
+- iOS Safari
+- Android Chrome
+- Desktop Chrome
+- Desktop Safari
+- Desktop Edge
+
+---
+
+# 42. Configuration
+
+Sensitive configuration must never be committed to source control.
+
+Example:
+
+```text
+DATABASE_URL=
+SERVER_HOST=
+SERVER_PORT=
+WEBSOCKET_PORT=
+LOG_LEVEL=
+```
+
+Production secrets must be stored securely.
+
+---
+
+# 43. Deployment Architecture
+
+Initial deployment may use a single C++ server:
+
+```text
+Internet
+   │
+   ▼
+HTTPS / WSS
+   │
+   ▼
+C++ Whosin Server
+   │
+   ▼
+PostgreSQL
+```
+
+As demand grows:
+
+```text
+Internet
+   │
+   ▼
+Load Balancer
+   │
+   ├── C++ Server
+   ├── C++ Server
+   └── C++ Server
+           │
+           ▼
+         Redis
+           │
+           ▼
+       PostgreSQL
+```
+
+Redis should only become part of the production architecture when horizontal scaling requires shared real-time state or Pub/Sub.
+
+---
+
+# 44. Success Metrics
+
+Important product metrics include:
+
+```text
+Games created
+Games started
+Games completed
+Average players per room
+Average rounds per game
+Replay rate
+Join success rate
+Connection failure rate
+Average session duration
+```
+
+A particularly useful metric is:
+
+> **Percentage of completed games that result in another game being started.**
+
+This measures whether the core experience naturally creates another round of play.
+
+---
+
+# 45. Final Architecture Principle
+
+The most important architectural rule is:
+
+> **The browser renders Whosin. The C++ server owns Whosin.**
+
+The browser is responsible for:
+
+- Presentation
+- Input
+- Interaction
+- Displaying synchronized state
+
+The server is responsible for:
+
+- Truth
+- Rules
+- State
+- Timing
+- Validation
+- Scoring
+- Permissions
+- Multiplayer synchronization
+
+---
+
+# 46. Build Order
+
+Development will proceed in this order:
+
+```text
+1. Git / repository foundation
+2. CMake project
+3. C++ server foundation
+4. Basic HTTP server
+5. Web client foundation
+6. WebSocket communication
+7. Room creation
+8. Room joining
+9. Lobby
+10. Host controls
+11. Game engine
+12. First playable game
+13. Scoring/results
+14. Replay
+15. Reconnection
+16. Error handling
+17. PostgreSQL
+18. Responsive/mobile polish
+19. Accessibility
+20. Testing
+21. Production deployment
+22. Monitoring
+23. Public launch
+```
+
+We will not build every subsystem simultaneously.
+
+Each phase should produce a working, testable result before the next major subsystem is introduced.
+
+---
+
+# 47. First Build Milestone
+
+The first meaningful multiplayer milestone is:
+
+> **Three people on three different devices can open the public Whosin URL, enter the same room using a four-character code, see one another appear instantly, start a game, play a complete round, receive the same result, and immediately play another round.**
+
+Everything else is secondary to proving this loop.
+
+---
+
+# 48. Project Status
+
+**Product:** Whosin
+
+**Tagline:** Who’s in? Let’s play.
+
+**Stage:** Pre-build specification
+
+**MVP:** Room-based real-time multiplayer web game
+
+**Authentication:** None
+
+**Installation:** None
+
+**Frontend:** HTML + CSS + JavaScript
+
+**Backend:** C++20
+
+**Networking:** HTTP + WebSocket
+
+**Build System:** CMake
+
+**Database:** PostgreSQL
+
+**Distributed State:** Redis when required for scaling
+
+**Primary Devices:** Mobile + desktop browsers
+
+**Core Principle:** Server-authoritative multiplayer state
+
+**Primary Success Condition:** A group can join and start playing with almost zero friction.
