@@ -12,6 +12,8 @@ add_executable(whosin
     src/main.cpp
     src/services/RoomService.cpp
     src/services/IdGenerator.cpp
+    src/services/GameService.cpp
+    src/game/TriviaGame.cpp
 )
 
 target_link_libraries(whosin
