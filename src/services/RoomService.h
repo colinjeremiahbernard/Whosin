@@ -1,15 +1,33 @@
+
 #pragma once
 
 #include "../models/Room.h"
 
 #include <string>
 
+enum class StartGameResult
+{
+    Success,
+    RoomNotFound,
+    NotHost,
+    AlreadyStarted
+};
+
+enum class JoinRoomResult
+{
+    Success,
+    RoomNotFound,
+    GameAlreadyStarted
+};
+
 class RoomService
 {
 public:
-    std::string createRoom();
+    std::string createRoom(
+        const std::string &hostName,
+        Player &host);
 
-    bool addPlayer(
+    JoinRoomResult addPlayer(
         const std::string &roomCode,
         const std::string &playerName,
         Player &player,
@@ -18,4 +36,8 @@ public:
     bool getRoom(
         const std::string &roomCode,
         Room &room);
+
+    StartGameResult startGame(
+        const std::string &roomCode,
+        const std::string &playerId);
 };
