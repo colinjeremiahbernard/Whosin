@@ -17,7 +17,7 @@
     session = { roomCode: data.roomCode, playerId: data.playerId };
     try { sessionStorage.setItem(sessionKey, JSON.stringify(session)); }
     catch { /* The page can work without storage. */ }
-    window.whosinLive.watch(session.roomCode);
+    window.whosinLive.watch(session.roomCode, session.playerId);
   }
 
   function clearSession() {
@@ -120,6 +120,10 @@
   });
 
   window.addEventListener("whosin.roomUpdated", refreshRoom);
+  window.addEventListener("whosin.sessionExpired", () => {
+    clearSession();
+    message("Your reconnect window ended. Create or join a new room.");
+  });
   window.addEventListener("whosin.refreshRoom", refreshRoom);
   try {
     const saved = JSON.parse(sessionStorage.getItem(sessionKey));
@@ -128,7 +132,8 @@
   } catch { clearSession(); }
   if (session) {
     element("entry").hidden = true;
-    window.whosinLive.watch(session.roomCode);
+    window.whosinLive.watch(session.roomCode, session.playerId);
     refreshRoom();
   }
 })();
+

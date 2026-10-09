@@ -5,6 +5,7 @@
   let retryTimer = null;
   let heartbeatTimer = null;
   let watchedRoom = null;
+  let watchedPlayer = null;
   let lastReply = 0;
   let stopped = false;
   const status = document.getElementById("connection-status");
@@ -12,10 +13,15 @@
   function subscribe() {
     if (socket?.readyState !== WebSocket.OPEN) return;
     socket.send(JSON.stringify(watchedRoom
-      ? { type: "watch", roomCode: watchedRoom } : { type: "unwatch" }));
+      ? { type: "watch", roomCode: watchedRoom, playerId: watchedPlayer }
+      : { type: "unwatch" }));
   }
   window.whosinLive = {
-    watch(roomCode) { watchedRoom = roomCode || null; subscribe(); }
+    watch(roomCode, playerId) {
+      watchedRoom = roomCode || null;
+      watchedPlayer = playerId || null;
+      subscribe();
+    }
   };
   function stopHeartbeat() {
     clearInterval(heartbeatTimer);
@@ -39,7 +45,9 @@
           connection.close();
           return;
         }
-        connection.send(JSON.stringify({ type: "ping" }));
+        connection.send(JSON.stringify(watchedRoom
+          ? { type: "ping", roomCode: watchedRoom, playerId: watchedPlayer }
+          : { type: "ping" }));
       }, 15000);
     });
     connection.addEventListener("message", (event) => {
@@ -52,6 +60,8 @@
         }
         if (message.type === "room.updated" && watchedRoom)
           window.dispatchEvent(new Event("whosin.roomUpdated"));
+        if (message.type === "session.expired")
+          window.dispatchEvent(new Event("whosin.sessionExpired"));
         if (message.type === "error") console.warn("Whosin:", message.message);
       } catch { console.warn("Whosin received an invalid server message."); }
     });
@@ -80,5 +90,14 @@
     stopped = false;
     connect();
   });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && !stopped) {
+      if (!socket || socket.readyState === WebSocket.CLOSED) {
+        clearTimeout(retryTimer);
+        connect();
+      } else subscribe();
+    }
+  });
   connect();
 })();
+

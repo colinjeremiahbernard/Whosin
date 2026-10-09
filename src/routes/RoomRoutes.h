@@ -3,6 +3,7 @@
 #include <crow.h>
 #include "../services/RoomService.h"
 #include "../services/RoomUpdates.h"
+#include "../services/PresenceService.h"
 #include <utility>
 #include <vector>
 
@@ -13,10 +14,11 @@ inline bool validName(const std::string &name)
 }
 
 inline void registerRoomRoutes(crow::SimpleApp &app,
-                              RoomService &rooms, RoomUpdates &updates)
+                              RoomService &rooms, RoomUpdates &updates,
+                              PresenceService &presence)
 {
     CROW_ROUTE(app, "/api/rooms").methods(crow::HTTPMethod::POST)(
-        [&rooms](const crow::request &request)
+        [&rooms, &presence](const crow::request &request)
     {
         const auto body = crow::json::load(request.body);
         if (!body || !body.has("name") ||
@@ -27,6 +29,7 @@ inline void registerRoomRoutes(crow::SimpleApp &app,
             return crow::response(400, R"({"error":"Enter a valid host name"})");
         Player host;
         const auto code = rooms.createRoom(name, host);
+        presence.track(code, host.id);
         crow::json::wvalue data;
         data["roomCode"] = code;
         data["playerId"] = host.id;
@@ -62,7 +65,7 @@ inline void registerRoomRoutes(crow::SimpleApp &app,
     });
 
     CROW_ROUTE(app, "/api/rooms/<string>/join").methods(crow::HTTPMethod::POST)(
-        [&rooms, &updates](const crow::request &request, std::string code)
+        [&rooms, &updates, &presence](const crow::request &request, std::string code)
     {
         const auto body = crow::json::load(request.body);
         if (!body || !body.has("name") ||
@@ -78,6 +81,7 @@ inline void registerRoomRoutes(crow::SimpleApp &app,
             return crow::response(404, R"({"error":"Room not found"})");
         if (result == JoinRoomResult::GameAlreadyStarted)
             return crow::response(409, R"({"error":"Game has already started"})");
+        presence.track(code, player.id);
         updates.publish(code);
         crow::json::wvalue data;
         data["roomCode"] = code;
@@ -88,3 +92,4 @@ inline void registerRoomRoutes(crow::SimpleApp &app,
         return crow::response{data};
     });
 }
+

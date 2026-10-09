@@ -13,6 +13,7 @@ add_executable(whosin
     src/services/RoomService.cpp
     src/services/IdGenerator.cpp
     src/services/GameService.cpp
+    src/services/PresenceService.cpp
     src/game/TriviaGame.cpp
 )
 
@@ -25,3 +26,4 @@ target_compile_definitions(whosin
     PRIVATE
         _WIN32_WINNT=0x0A00
 )
+

@@ -1,5 +1,6 @@
 #include "TriviaGame.h"
 #include <utility>
+#include <algorithm>
 
 TriviaGame::TriviaGame(std::string host, std::vector<Player> members)
     : hostId(std::move(host)), players(std::move(members))
@@ -20,14 +21,26 @@ GameActionResult TriviaGame::answer(
 
     answers.emplace(playerId, choice);
 
-    // Score only after everyone submits so partial scores cannot reveal answers.
-    if (answers.size() == players.size())
-    {
-        for (const auto &[id, submitted] : answers)
-            if (submitted == triviaQuestions[round].correct) ++scores.at(id);
-        phase = TriviaPhase::Result;
-    }
+    finishRoundIfReady();
     return {};
+}
+
+void TriviaGame::finishRoundIfReady()
+{
+    if (phase != TriviaPhase::Question || players.empty() ||
+        answers.size() != players.size()) return;
+    for (const auto &[id, submitted] : answers)
+        if (submitted == triviaQuestions[round].correct) ++scores.at(id);
+    phase = TriviaPhase::Result;
+}
+
+void TriviaGame::leave(const std::string &playerId, const std::string &newHost)
+{
+    std::erase_if(players, [&](const Player &p) { return p.id == playerId; });
+    answers.erase(playerId);
+    scores.erase(playerId);
+    hostId = newHost;
+    finishRoundIfReady();
 }
 
 GameActionResult TriviaGame::next(
@@ -64,3 +77,4 @@ GameActionResult TriviaGame::replay(
     phase = TriviaPhase::Question;
     return {};
 }
+

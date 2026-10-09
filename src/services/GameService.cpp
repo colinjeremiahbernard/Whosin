@@ -1,5 +1,19 @@
 #include "GameService.h"
 
+bool GameService::leave(const std::string &code, const std::string &playerId)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    Room room;
+    if (!rooms_.removePlayer(code, playerId, room)) return false;
+    auto found = games_.find(code);
+    if (found != games_.end())
+    {
+        if (room.players.empty()) games_.erase(found);
+        else found->second.leave(playerId, room.hostId);
+    }
+    return true;
+}
+
 GameActionResult GameService::start(
     const std::string &code, const std::string &playerId)
 {
@@ -60,3 +74,4 @@ GameActionResult GameService::replay(
     if (result.status == 200) rooms_.setStatus(code, GameStatus::Playing);
     return result;
 }
+

@@ -23,6 +23,8 @@ enum class JoinRoomResult
 class RoomService
 {
 public:
+    bool removePlayer(const std::string &code, const std::string &playerId, Room &room);
+
     void setStatus(const std::string &roomCode, GameStatus status);
 
     std::string createRoom(
@@ -43,4 +45,5 @@ public:
         const std::string &roomCode,
         const std::string &playerId);
 };
+
 

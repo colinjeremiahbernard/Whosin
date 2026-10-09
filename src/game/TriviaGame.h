@@ -26,6 +26,8 @@ struct TriviaGame
 
     TriviaGame() = default;
     TriviaGame(std::string host, std::vector<Player> members);
+    void leave(const std::string &playerId, const std::string &newHost);
+    void finishRoundIfReady();
     GameActionResult answer(const std::string &playerId, int choice,
                             int expectedRound, unsigned int expectedGame);
     GameActionResult next(const std::string &playerId,
@@ -33,3 +35,4 @@ struct TriviaGame
     GameActionResult replay(const std::string &playerId,
                             unsigned int expectedGame);
 };
+

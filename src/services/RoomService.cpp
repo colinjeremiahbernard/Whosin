@@ -3,6 +3,7 @@
 #include "IdGenerator.h"
 
 #include <mutex>
+#include <algorithm>
 #include <unordered_map>
 #include <utility>
 
@@ -124,4 +125,22 @@ void RoomService::setStatus(const std::string &roomCode, GameStatus status)
   auto it = rooms.find(roomCode);
   if (it != rooms.end()) it->second.status = status;
 }
+
+bool RoomService::removePlayer(
+    const std::string &code, const std::string &playerId, Room &snapshot)
+{
+  std::lock_guard<std::mutex> lock(roomsMutex);
+  auto found = rooms.find(code);
+  if (found == rooms.end()) return false;
+  auto &room = found->second;
+  const auto previous = room.players.size();
+  std::erase_if(room.players, [&](const Player &p) { return p.id == playerId; });
+  if (room.players.size() == previous) return false;
+  if (room.hostId == playerId)
+    room.hostId = room.players.empty() ? "" : room.players.front().id;
+  snapshot = room;
+  if (room.players.empty()) rooms.erase(found);
+  return true;
+}
+
 

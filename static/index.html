@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Whosin — Who's in? Let's play.</title>
-  <link rel="stylesheet" href="/static/styles.css?v=3">
-  <script src="/static/api.js?v=3" defer></script>
-  <script src="/static/websocket.js?v=3" defer></script>
-  <script src="/static/game-view.js?v=3" defer></script>
-  <script src="/static/game.js?v=3" defer></script>
-  <script src="/static/app.js?v=3" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=4">
+  <script src="/static/api.js?v=4" defer></script>
+  <script src="/static/websocket.js?v=4" defer></script>
+  <script src="/static/game-view.js?v=4" defer></script>
+  <script src="/static/game.js?v=4" defer></script>
+  <script src="/static/app.js?v=4" defer></script>
 </head>
 <body>
   <main>
@@ -45,6 +45,7 @@
       <ul id="players"></ul>
       <p id="game-status" role="status" aria-live="polite"></p>
       <p>Trivia: 5 rounds. A correct answer earns 1 point.</p>
+      <p>Disconnected players have 30 seconds to reconnect.</p>
       <button id="start-game" type="button" hidden>Start Game</button>
     </section>
     <section id="game-panel" class="card game-card" hidden>
@@ -60,3 +61,4 @@
   </main>
 </body>
 </html>
+
