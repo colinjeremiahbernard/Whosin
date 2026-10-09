@@ -119,6 +119,22 @@
     });
   });
 
+  element("leave-room").addEventListener("click", (event) => {
+    submitAction(event.currentTarget, async () => {
+      if (!session) return;
+      const active = session;
+      try {
+        await api(`${roomPath()}/leave`, { playerId: active.playerId });
+      } catch (error) {
+        if (error.status !== 404) throw error;
+      }
+      if (active !== session) return;
+      clearSession();
+      message("You left the room.");
+      element("host-name").focus();
+    });
+  });
+
   window.addEventListener("whosin.roomUpdated", refreshRoom);
   window.addEventListener("whosin.sessionExpired", () => {
     clearSession();
@@ -136,4 +152,3 @@
     refreshRoom();
   }
 })();
-

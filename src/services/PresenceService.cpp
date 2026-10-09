@@ -77,3 +77,13 @@ std::vector<std::string> PresenceService::sweep(Time now)
     }
     return {changed.begin(), changed.end()};
 }
+
+bool PresenceService::leave(const std::string &code, const std::string &id)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!games_.leave(code, id)) return false;
+    const auto key = code + ":" + id;
+    std::erase_if(links_, [&](const auto &link) { return link.second.key == key; });
+    players_.erase(key);
+    return true;
+}

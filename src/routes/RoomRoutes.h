@@ -64,6 +64,22 @@ inline void registerRoomRoutes(crow::SimpleApp &app,
         return response;
     });
 
+    CROW_ROUTE(app, "/api/rooms/<string>/leave").methods(crow::HTTPMethod::POST)(
+        [&presence, &updates](const crow::request &request, std::string code)
+    {
+        const auto body = crow::json::load(request.body);
+        if (!body || !body.has("playerId") ||
+            body["playerId"].t() != crow::json::type::String)
+            return crow::response(400, R"({"error":"Player ID is required"})");
+        const std::string id = body["playerId"].s();
+        if (code.size() != 6 || id.size() != 16)
+            return crow::response(400, R"({"error":"Invalid room or player ID"})");
+        if (!presence.leave(code, id))
+            return crow::response(404, R"({"error":"Player session not found"})");
+        updates.publish(code);
+        return crow::response(200, R"({"ok":true})");
+    });
+
     CROW_ROUTE(app, "/api/rooms/<string>/join").methods(crow::HTTPMethod::POST)(
         [&rooms, &updates, &presence](const crow::request &request, std::string code)
     {
@@ -92,4 +108,3 @@ inline void registerRoomRoutes(crow::SimpleApp &app,
         return crow::response{data};
     });
 }
-

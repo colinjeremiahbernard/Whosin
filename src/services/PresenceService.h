@@ -18,6 +18,7 @@ public:
     void track(const std::string &code, const std::string &id, Time now = Clock::now());
     bool watch(SocketId socket, const std::string &code, const std::string &id,
                Time now = Clock::now());
+    bool leave(const std::string &code, const std::string &id);
     void touch(SocketId socket, Time now = Clock::now());
     void disconnect(SocketId socket, Time now = Clock::now());
     std::vector<std::string> sweep(Time now = Clock::now());
