@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Whosin — Who's in? Let's play.</title>
+  <link rel="stylesheet" href="/static/styles.css?v=5">
+  <script src="/static/api.js?v=5" defer></script>
+  <script src="/static/websocket.js?v=5" defer></script>
+  <script src="/static/game-view.js?v=5" defer></script>
+  <script src="/static/timer.js?v=5" defer></script>
+  <script src="/static/game.js?v=5" defer></script>
+  <script src="/static/app.js?v=5" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="brand">WHOSIN</p>
+      <h1>Who's in? Let's play.</h1>
+      <p>Five questions. Your friends. One winner—or a tie.</p>
+      <p id="connection-status" role="status" aria-live="polite">Connecting…</p>
+    </header>
+    <p id="message" role="status" aria-live="polite"></p>
+    <section id="entry" class="cards">
+      <form id="create-form" class="card">
+        <h2>Create a game</h2>
+        <label for="host-name">Your name</label>
+        <input id="host-name" required maxlength="30" autocomplete="nickname">
+        <button type="submit">Create Game</button>
+      </form>
+      <form id="join-form" class="card">
+        <h2>Join your friends</h2>
+        <label for="room-code">Room code</label>
+        <input id="room-code" required maxlength="6" autocomplete="off"
+               autocapitalize="characters" spellcheck="false">
+        <label for="player-name">Your name</label>
+        <input id="player-name" required maxlength="30" autocomplete="nickname">
+        <button type="submit">Join Game</button>
+      </form>
+    </section>
+    <section id="lobby" class="card" hidden>
+      <p class="eyebrow">YOUR ROOM</p>
+      <h2 id="lobby-code"></h2>
+      <p>Share this code with your friends.</p>
+      <h3>Players</h3>
+      <ul id="players"></ul>
+      <p id="game-status" role="status" aria-live="polite"></p>
+      <p>Trivia: 5 rounds. 20 seconds per question. A correct answer earns 1 point.</p>
+      <p>Disconnected players have 30 seconds to reconnect.</p>
+      <button id="start-game" type="button" hidden>Start Game</button>
+    </section>
+    <section id="game-panel" class="card game-card" hidden>
+      <p id="round-label" class="eyebrow"></p>
+      <h2 id="question" tabindex="-1"></h2>
+      <p id="round-timer" role="timer" aria-label="Time remaining" hidden></p>
+      <div id="answer-options" class="answers"></div>
+      <p id="round-status" role="status" aria-live="polite"></p>
+      <h3>Scoreboard</h3>
+      <ul id="score-list"></ul>
+      <p id="host-instruction" role="status" aria-live="polite"></p>
+      <button id="advance-game" type="button" hidden>Next Round</button>
+    </section>
+  </main>
+</body>
+</html>
