@@ -10,6 +10,7 @@ class GameService
 public:
     explicit GameService(RoomService &rooms) : rooms_(rooms) {}
     GameActionResult start(const std::string &code, const std::string &playerId);
+    std::vector<std::string> sweep();
     bool get(const std::string &code, TriviaGame &game);
     bool leave(const std::string &code, const std::string &playerId);
     GameActionResult answer(const std::string &code, const std::string &playerId,
@@ -24,4 +25,3 @@ private:
     std::mutex mutex_;
     std::unordered_map<std::string, TriviaGame> games_;
 };
-

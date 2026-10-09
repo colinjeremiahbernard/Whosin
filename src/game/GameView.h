@@ -3,11 +3,17 @@
 #include <crow.h>
 #include "TriviaGame.h"
 #include <utility>
+#include <algorithm>
+#include <cstdint>
 #include <vector>
 
 inline crow::json::wvalue gameView(const TriviaGame &game)
 {
     crow::json::wvalue data;
+    const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+        game.deadline - TriviaGame::Clock::now()).count();
+    data["remainingMs"] = game.phase == TriviaPhase::Question
+        ? static_cast<double>(std::max<std::int64_t>(0, remaining)) : 0.0;
     data["round"] = static_cast<int>(game.round + 1);
     data["totalRounds"] = static_cast<int>(triviaQuestions.size());
     data["generation"] = game.generation;

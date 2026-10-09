@@ -19,13 +19,13 @@ int main()
     registerRoomRoutes(app, rooms, updates, presence);
     registerGameRoutes(app, games, updates);
     registerWebRoutes(app, updates, presence);
-    app.tick(std::chrono::seconds(1), [&presence, &updates]()
+    app.tick(std::chrono::seconds(1), [&presence, &games, &updates]()
     {
         for (const auto &code : presence.sweep()) updates.publish(code);
+        for (const auto &code : games.sweep()) updates.publish(code);
     });
 
     std::cout << "Whosin starting on http://localhost:8080\n";
     app.port(8080).multithreaded().run();
     return 0;
 }
-

@@ -15,7 +15,8 @@ GameActionResult TriviaGame::answer(
     if (!scores.contains(playerId)) return {403, "Player is not in this game"};
     if (expectedGame != generation || expectedRound != static_cast<int>(round + 1))
         return {409, "The game has moved on. Try again"};
-    if (phase != TriviaPhase::Question) return {409, "This round has ended"};
+    if (phase != TriviaPhase::Question || Clock::now() >= deadline)
+        return {409, "This round has ended"};
     if (choice < 0 || choice >= 4) return {400, "Choose a valid answer"};
     if (answers.contains(playerId)) return {409, "You have already answered"};
 
@@ -29,6 +30,24 @@ void TriviaGame::finishRoundIfReady()
 {
     if (phase != TriviaPhase::Question || players.empty() ||
         answers.size() != players.size()) return;
+    finishRound();
+}
+
+void TriviaGame::resetDeadline()
+{
+    deadline = Clock::now() + std::chrono::seconds(20);
+}
+
+bool TriviaGame::expire(Clock::time_point now)
+{
+    if (phase != TriviaPhase::Question || now < deadline) return false;
+    finishRound();
+    return true;
+}
+
+void TriviaGame::finishRound()
+{
+    if (phase != TriviaPhase::Question) return;
     for (const auto &[id, submitted] : answers)
         if (submitted == triviaQuestions[round].correct) ++scores.at(id);
     phase = TriviaPhase::Result;
@@ -59,6 +78,7 @@ GameActionResult TriviaGame::next(
         ++round;
         answers.clear();
         phase = TriviaPhase::Question;
+        resetDeadline();
     }
     return {};
 }
@@ -75,6 +95,6 @@ GameActionResult TriviaGame::replay(
     answers.clear();
     for (auto &[id, score] : scores) score = 0;
     phase = TriviaPhase::Question;
+    resetDeadline();
     return {};
 }
-

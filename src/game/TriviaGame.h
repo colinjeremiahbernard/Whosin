@@ -3,6 +3,7 @@
 #include "Questions.h"
 #include "../models/Player.h"
 #include <string>
+#include <chrono>
 #include <unordered_map>
 #include <vector>
 
@@ -24,6 +25,12 @@ struct TriviaGame
     unsigned int generation = 1;
     TriviaPhase phase = TriviaPhase::Question;
 
+    using Clock = std::chrono::steady_clock;
+    Clock::time_point deadline = Clock::now() + std::chrono::seconds(20);
+    bool expire(Clock::time_point now = Clock::now());
+    void finishRound();
+    void resetDeadline();
+
     TriviaGame() = default;
     TriviaGame(std::string host, std::vector<Player> members);
     void leave(const std::string &playerId, const std::string &newHost);
@@ -35,4 +42,3 @@ struct TriviaGame
     GameActionResult replay(const std::string &playerId,
                             unsigned int expectedGame);
 };
-

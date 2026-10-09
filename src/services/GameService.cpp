@@ -75,3 +75,13 @@ GameActionResult GameService::replay(
     return result;
 }
 
+
+std::vector<std::string> GameService::sweep()
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<std::string> changed;
+    const auto now = TriviaGame::Clock::now();
+    for (auto &[code, game] : games_)
+        if (game.expire(now)) changed.push_back(code);
+    return changed;
+}

@@ -27,6 +27,7 @@
         const state = await api(`${path(active)}/game`);
         if (!context || active.room.roomCode !== context.room.roomCode) continue;
         game = state;
+        window.whosinTimer.update(state);
         render();
       } catch (error) {
         if (context && active.room.roomCode === context.room.roomCode)
@@ -64,6 +65,7 @@
   window.addEventListener("whosin.roomState", (event) => {
     const next = event.detail;
     if (!next || next.room.status === "waiting") {
+      window.whosinTimer.update(null);
       context = null;
       game = null;
       document.getElementById("game-panel").hidden = true;
