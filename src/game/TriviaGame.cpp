@@ -49,7 +49,7 @@ void TriviaGame::finishRound()
 {
     if (phase != TriviaPhase::Question) return;
     for (const auto &[id, submitted] : answers)
-        if (submitted == triviaQuestions[round].correct) ++scores.at(id);
+        if (submitted == triviaQuestions[questions[round]].correct) ++scores.at(id);
     phase = TriviaPhase::Result;
 }
 
@@ -71,7 +71,7 @@ GameActionResult TriviaGame::next(
         return {409, "The game has moved on. Try again"};
     if (phase != TriviaPhase::Result) return {409, "Wait for the round results"};
 
-    if (round + 1 == triviaQuestions.size())
+    if (round + 1 == questions.size())
         phase = TriviaPhase::Finished;
     else
     {
@@ -90,6 +90,7 @@ GameActionResult TriviaGame::replay(
     if (expectedGame != generation) return {409, "The game has moved on. Try again"};
     if (phase != TriviaPhase::Finished) return {409, "Finish this game first"};
 
+    questions = selectQuestions(questions);
     ++generation;
     round = 0;
     answers.clear();

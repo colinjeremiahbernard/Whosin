@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Questions.h"
+#include "QuestionSelection.h"
 #include "../models/Player.h"
 #include <string>
 #include <chrono>
@@ -21,6 +21,7 @@ struct TriviaGame
     std::vector<Player> players;
     std::unordered_map<std::string, int> answers;
     std::unordered_map<std::string, int> scores;
+    QuestionSelection questions = selectQuestions();
     std::size_t round = 0;
     unsigned int generation = 1;
     TriviaPhase phase = TriviaPhase::Question;

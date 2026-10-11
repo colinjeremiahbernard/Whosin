@@ -15,7 +15,7 @@ inline crow::json::wvalue gameView(const TriviaGame &game)
     data["remainingMs"] = game.phase == TriviaPhase::Question
         ? static_cast<double>(std::max<std::int64_t>(0, remaining)) : 0.0;
     data["round"] = static_cast<int>(game.round + 1);
-    data["totalRounds"] = static_cast<int>(triviaQuestions.size());
+    data["totalRounds"] = static_cast<int>(game.questions.size());
     data["generation"] = game.generation;
     data["hostId"] = game.hostId;
     data["phase"] = game.phase == TriviaPhase::Question ? "question" :
@@ -23,7 +23,7 @@ inline crow::json::wvalue gameView(const TriviaGame &game)
     data["submittedCount"] = static_cast<int>(game.answers.size());
     data["playerCount"] = static_cast<int>(game.players.size());
 
-    const auto &question = triviaQuestions[game.round];
+    const auto &question = triviaQuestions[game.questions[game.round]];
     data["question"] = question.text;
     std::vector<crow::json::wvalue> options;
     for (const auto &option : question.options) options.emplace_back(option);
