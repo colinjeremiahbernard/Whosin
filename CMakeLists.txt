@@ -22,8 +22,10 @@ target_link_libraries(whosin
         Crow::Crow
 )
 
-target_compile_definitions(whosin
-    PRIVATE
-        _WIN32_WINNT=0x0A00
-)
+if(WIN32)
+    target_compile_definitions(whosin
+        PRIVATE
+            _WIN32_WINNT=0x0A00
+    )
+endif()
 
