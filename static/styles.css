@@ -61,3 +61,53 @@ input:focus-visible, button:focus-visible {
   .cards, .answers { grid-template-columns: 1fr; }
   main { padding-top: 28px; }
 }
+
+/* Keep the question prominent once the game starts. */
+body { min-height: 100dvh; }
+main { padding-bottom: max(28px, env(safe-area-inset-bottom)); }
+input { font-size: 16px; }
+button { touch-action: manipulation; }
+.card, li { overflow-wrap: anywhere; }
+#question { font-size: clamp(1.35rem, 4vw, 1.8rem); line-height: 1.4; }
+#round-label { color: #a6ffcb; font-weight: 750; }
+#round-timer {
+  display: inline-block;
+  margin: 0 0 20px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: #101322;
+  color: #f5f6ff;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+#round-status { padding: 12px 14px; background: #101322; border-radius: 12px; }
+#game-panel[data-phase="result"] #round-status { border-left: 4px solid #a6ffcb; }
+#game-panel[data-phase="finished"] { border-color: #a6ffcb; }
+.answer-option { min-height: 64px; line-height: 1.5; }
+.answer-option:disabled { opacity: 0.85; }
+.answer-option.incorrect { border: 2px solid #ffb4b4; background: #492c39; opacity: 1; }
+#leave-room { background: transparent; color: #c3c8df; border: 1px solid #677393; }
+#leave-room:hover { background: #2c3550; }
+.playing header { margin-bottom: 12px; }
+.playing header h1, .playing header > p:not(.brand):not(#connection-status),
+.playing .lobby-help, .playing #lobby > h3, .playing #game-status { display: none; }
+.playing #lobby { padding: 16px 20px; }
+.playing #lobby-code { font-size: 1.6rem; margin: 0; }
+.playing #lobby .eyebrow { margin: 0 0 4px; }
+.playing #players { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0; }
+.playing #players li { border: 0; padding: 0; font-size: 0.9rem; }
+.playing #leave-room { margin-top: 6px; min-height: 44px; }
+#score-list li { line-height: 1.5; }
+@media (max-width: 620px) {
+  main { padding: 20px 14px max(24px, env(safe-area-inset-bottom)); }
+  .card { padding: 20px; border-radius: 16px; }
+  header { margin-bottom: 20px; }
+  .playing main { padding-top: 12px; }
+  .playing .brand { margin: 4px 0; }
+  .playing #connection-status { margin: 4px 0; font-size: 0.85rem; }
+  .playing #message:empty { display: none; }
+  .game-card { margin-top: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}

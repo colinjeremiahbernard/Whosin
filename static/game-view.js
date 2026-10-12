@@ -7,6 +7,7 @@ window.whosinGameView = (game, context, busy, act) => {
   const question = game.phase === "question";
   const finished = game.phase === "finished";
   element("game-panel").hidden = false;
+  element("game-panel").dataset.phase = game.phase;
   element("round-label").textContent = finished ? "FINAL RESULTS"
     : `ROUND ${game.round} OF ${game.totalRounds}`;
   element("question").textContent = finished ? "Thanks for playing!" : game.question;
@@ -22,6 +23,9 @@ window.whosinGameView = (game, context, busy, act) => {
       if (!question && index === game.correctAnswer) {
         button.classList.add("correct");
         button.textContent += " — Correct answer";
+      } else if (!question && me?.answer === index) {
+        button.classList.add("incorrect");
+        button.textContent += " — Your answer";
       }
       button.addEventListener("click", () => act("answer", { answer: index }));
       element("answer-options").append(button);

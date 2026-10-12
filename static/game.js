@@ -64,6 +64,7 @@
 
   window.addEventListener("whosin.roomState", (event) => {
     const next = event.detail;
+    document.body.classList.toggle("playing", !!next && next.room.status !== "waiting");
     if (!next || next.room.status === "waiting") {
       window.whosinTimer.update(null);
       context = null;

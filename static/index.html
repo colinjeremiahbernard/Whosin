@@ -4,13 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Whosin — Who's in? Let's play.</title>
-  <link rel="stylesheet" href="/static/styles.css?v=6">
-  <script src="/static/api.js?v=6" defer></script>
-  <script src="/static/websocket.js?v=6" defer></script>
-  <script src="/static/game-view.js?v=6" defer></script>
-  <script src="/static/timer.js?v=6" defer></script>
-  <script src="/static/game.js?v=6" defer></script>
-  <script src="/static/app.js?v=6" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=7">
+  <script src="/static/api.js?v=7" defer></script>
+  <script src="/static/websocket.js?v=7" defer></script>
+  <script src="/static/game-view.js?v=7" defer></script>
+  <script src="/static/timer.js?v=7" defer></script>
+  <script src="/static/game.js?v=7" defer></script>
+  <script src="/static/app.js?v=7" defer></script>
 </head>
 <body>
   <main>
@@ -41,12 +41,12 @@
     <section id="lobby" class="card" hidden>
       <p class="eyebrow">YOUR ROOM</p>
       <h2 id="lobby-code"></h2>
-      <p>Share this code with your friends.</p>
+      <p class="lobby-help">Share this code with your friends.</p>
       <h3>Players</h3>
       <ul id="players"></ul>
       <p id="game-status" role="status" aria-live="polite"></p>
-      <p>Trivia: 5 rounds. 20 seconds per question. A correct answer earns 1 point.</p>
-      <p>Disconnected players have 30 seconds to reconnect.</p>
+      <p class="lobby-help">Trivia: 5 rounds. 20 seconds per question. A correct answer earns 1 point.</p>
+      <p class="lobby-help">Disconnected players have 30 seconds to reconnect.</p>
       <button id="start-game" type="button" hidden>Start Game</button>
       <button id="leave-room" type="button">Leave Room</button>
     </section>
