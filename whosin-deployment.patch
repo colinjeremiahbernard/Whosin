@@ -1,0 +1,199 @@
+From c1cf315f0a4ddb9d5144888fc042304786360b5f Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Sun, 11 Oct 2026 20:39:17 -0400
+Subject: [PATCH] Add Docker deployment and configurable server port
+
+---
+ .dockerignore             | 17 ++++++++++++++
+ Dockerfile                | 30 ++++++++++++++++++++++++
+ docs/DEPLOYMENT.md        | 49 +++++++++++++++++++++++++++++++++++++++
+ src/config/ServerConfig.h | 19 +++++++++++++++
+ src/main.cpp              | 20 ++++++++++++++--
+ 5 files changed, 133 insertions(+), 2 deletions(-)
+ create mode 100644 .dockerignore
+ create mode 100644 Dockerfile
+ create mode 100644 docs/DEPLOYMENT.md
+ create mode 100644 src/config/ServerConfig.h
+
+diff --git a/.dockerignore b/.dockerignore
+new file mode 100644
+index 0000000..5121064
+--- /dev/null
++++ b/.dockerignore
+@@ -0,0 +1,17 @@
++*
++!Dockerfile
++!CMakeLists.txt
++!src/
++!src/main.cpp
++!src/config/
++!src/config/**
++!src/game/
++!src/game/**
++!src/models/
++!src/models/**
++!src/routes/
++!src/routes/**
++!src/services/
++!src/services/**
++!static/
++!static/**
+diff --git a/Dockerfile b/Dockerfile
+new file mode 100644
+index 0000000..08f0a54
+--- /dev/null
++++ b/Dockerfile
+@@ -0,0 +1,30 @@
++FROM ubuntu:24.04 AS build
++RUN apt-get update && apt-get install -y --no-install-recommends \
++    ca-certificates cmake g++ git libasio-dev ninja-build \
++    && rm -rf /var/lib/apt/lists/*
++RUN git clone --depth 1 --branch v1.3.2 https://github.com/CrowCpp/Crow.git /tmp/crow \
++    && cmake -S /tmp/crow -B /tmp/crow-build \
++       -DCROW_BUILD_EXAMPLES=OFF -DCROW_BUILD_TESTS=OFF -DCROW_INSTALL=ON \
++       -DCROW_ENABLE_SSL=OFF -DCROW_ENABLE_COMPRESSION=OFF \
++    && cmake --install /tmp/crow-build
++WORKDIR /source
++COPY CMakeLists.txt ./
++COPY src/ ./src/
++RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
++    && cmake --build build --parallel 2
++
++FROM ubuntu:24.04
++RUN apt-get update && apt-get install -y --no-install-recommends \
++    ca-certificates curl libstdc++6 \
++    && rm -rf /var/lib/apt/lists/* \
++    && groupadd --gid 10001 whosin \
++    && useradd --uid 10001 --gid whosin --no-create-home whosin
++WORKDIR /app
++COPY --from=build /source/build/whosin ./whosin
++COPY static/ ./static/
++USER whosin
++ENV PORT=8080
++EXPOSE 8080
++HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
++    CMD curl --fail --silent "http://127.0.0.1:${PORT}/health" || exit 1
++CMD ["./whosin"]
+diff --git a/docs/DEPLOYMENT.md b/docs/DEPLOYMENT.md
+new file mode 100644
+index 0000000..a643f8f
+--- /dev/null
++++ b/docs/DEPLOYMENT.md
+@@ -0,0 +1,49 @@
++# Run Whosin on a host
++
++Whosin now supports `PORT` (default: 8080) and `GET /health`.
++Invalid ports fail at startup with a readable error.
++
++## Docker
++
++From the repository root:
++
++```sh
++docker build -t whosin .
++docker run --rm -p 8080:8080 whosin
++```
++
++Open http://localhost:8080. The container builds the C++ server and includes
++the browser files. It runs as an unprivileged user.
++
++To select another internal port:
++
++```sh
++docker run --rm -e PORT=9000 -p 9000:9000 whosin
++```
++
++## Hosting requirements
++
++Choose a host that supports long-running Docker containers and WebSockets.
++Configure its build context as the repository root and use `Dockerfile`.
++Set its health-check path to `/health` and route traffic to the `PORT` value.
++Use one running instance: room and game state are held in memory.
++Server restarts clear all rooms; persistent storage is not implemented.
++
++The hosting service or reverse proxy must provide HTTPS and forward WebSocket
++upgrade requests to `/ws`. The browser automatically uses WSS on HTTPS pages.
++Do not expose the server directly over plain HTTP for public play.
++
++This configuration prepares deployment; it does not provision hosting or a
++public URL. Rate limiting, monitoring, and public-launch security checks remain.
++
++## Windows development
++
++Run from the repository root so the server can find `static/`:
++
++```powershell
++cmake --build build
++$env:PORT = "8080"
++.\build\Debug\whosin.exe
++```
++
++Remove the override with `Remove-Item Env:PORT`.
+diff --git a/src/config/ServerConfig.h b/src/config/ServerConfig.h
+new file mode 100644
+index 0000000..e7d8d71
+--- /dev/null
++++ b/src/config/ServerConfig.h
+@@ -0,0 +1,19 @@
++#pragma once
++
++#include <charconv>
++#include <cstdlib>
++#include <stdexcept>
++#include <string_view>
++
++inline unsigned short serverPort()
++{
++    const char *value = std::getenv("PORT");
++    if (!value) return 8080;
++    const std::string_view text{value};
++    unsigned int port = 0;
++    const auto result = std::from_chars(text.data(), text.data() + text.size(), port);
++    if (result.ec != std::errc{} || result.ptr != text.data() + text.size() ||
++        port == 0 || port > 65535)
++        throw std::runtime_error("PORT must be an integer between 1 and 65535");
++    return static_cast<unsigned short>(port);
++}
+diff --git a/src/main.cpp b/src/main.cpp
+index 2eae12f..bfb7fa1 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -7,9 +7,17 @@
+ #include "routes/GameRoutes.h"
+ #include "routes/WebRoutes.h"
+ #include <iostream>
++#include "config/ServerConfig.h"
+ 
+ int main()
+ {
++    unsigned short port;
++    try { port = serverPort(); }
++    catch (const std::exception &error)
++    {
++        std::cerr << error.what() << "\n";
++        return 1;
++    }
+     RoomService rooms;
+     GameService games(rooms);
+     RoomUpdates updates;
+@@ -25,7 +33,15 @@ int main()
+         for (const auto &code : games.sweep()) updates.publish(code);
+     });
+ 
+-    std::cout << "Whosin starting on http://localhost:8080\n";
+-    app.port(8080).multithreaded().run();
++    CROW_ROUTE(app, "/health")([]()
++    {
++        crow::json::wvalue data;
++        data["status"] = "ok";
++        crow::response response{data};
++        response.add_header("Cache-Control", "no-store");
++        return response;
++    });
++    std::cout << "Whosin starting on port " << port << "\n";
++    app.bindaddr("0.0.0.0").port(port).multithreaded().run();
+     return 0;
+ }
+-- 
+2.51.1
+

@@ -1,0 +1,202 @@
+From 56d28991b83532fc4668b88f3b71d3e792ebc5b4 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Sun, 11 Oct 2026 19:53:35 -0400
+Subject: [PATCH] Select fresh trivia questions for each replay
+
+---
+ src/game/GameView.h          |  4 ++--
+ src/game/QuestionSelection.h | 24 ++++++++++++++++++++++
+ src/game/Questions.h         | 19 +++++++++++++++--
+ src/game/TriviaGame.cpp      |  5 +++--
+ src/game/TriviaGame.h        |  3 ++-
+ tests/trivia_replay.cpp      | 40 ++++++++++++++++++++++++++++++++++++
+ 6 files changed, 88 insertions(+), 7 deletions(-)
+ create mode 100644 src/game/QuestionSelection.h
+ create mode 100644 tests/trivia_replay.cpp
+
+diff --git a/src/game/GameView.h b/src/game/GameView.h
+index 428fc4f..3ad83b8 100644
+--- a/src/game/GameView.h
++++ b/src/game/GameView.h
+@@ -15,7 +15,7 @@ inline crow::json::wvalue gameView(const TriviaGame &game)
+     data["remainingMs"] = game.phase == TriviaPhase::Question
+         ? static_cast<double>(std::max<std::int64_t>(0, remaining)) : 0.0;
+     data["round"] = static_cast<int>(game.round + 1);
+-    data["totalRounds"] = static_cast<int>(triviaQuestions.size());
++    data["totalRounds"] = static_cast<int>(game.questions.size());
+     data["generation"] = game.generation;
+     data["hostId"] = game.hostId;
+     data["phase"] = game.phase == TriviaPhase::Question ? "question" :
+@@ -23,7 +23,7 @@ inline crow::json::wvalue gameView(const TriviaGame &game)
+     data["submittedCount"] = static_cast<int>(game.answers.size());
+     data["playerCount"] = static_cast<int>(game.players.size());
+ 
+-    const auto &question = triviaQuestions[game.round];
++    const auto &question = triviaQuestions[game.questions[game.round]];
+     data["question"] = question.text;
+     std::vector<crow::json::wvalue> options;
+     for (const auto &option : question.options) options.emplace_back(option);
+diff --git a/src/game/QuestionSelection.h b/src/game/QuestionSelection.h
+new file mode 100644
+index 0000000..e1b4bb7
+--- /dev/null
++++ b/src/game/QuestionSelection.h
+@@ -0,0 +1,24 @@
++#pragma once
++
++#include "Questions.h"
++#include <algorithm>
++#include <random>
++#include <vector>
++
++using QuestionSelection = std::array<std::size_t, 5>;
++static_assert(triviaQuestions.size() >= 10);
++
++inline QuestionSelection selectQuestions(const QuestionSelection &previous = {
++    triviaQuestions.size(), triviaQuestions.size(), triviaQuestions.size(),
++    triviaQuestions.size(), triviaQuestions.size()})
++{
++    std::vector<std::size_t> available;
++    for (std::size_t i = 0; i < triviaQuestions.size(); ++i)
++        if (std::find(previous.begin(), previous.end(), i) == previous.end())
++            available.push_back(i);
++    thread_local std::mt19937 random{std::random_device{}()};
++    std::shuffle(available.begin(), available.end(), random);
++    QuestionSelection selection;
++    std::copy_n(available.begin(), selection.size(), selection.begin());
++    return selection;
++}
+diff --git a/src/game/Questions.h b/src/game/Questions.h
+index 972887f..16def5f 100644
+--- a/src/game/Questions.h
++++ b/src/game/Questions.h
+@@ -10,7 +10,7 @@ struct TriviaQuestion
+     int correct;
+ };
+ 
+-inline const std::array<TriviaQuestion, 5> triviaQuestions{{
++inline const std::array<TriviaQuestion, 20> triviaQuestions{{
+     {"Which planet is known as the Red Planet?",
+      {"Venus", "Mars", "Jupiter", "Mercury"}, 1},
+     {"How many sides does a hexagon have?",
+@@ -20,5 +20,20 @@ inline const std::array<TriviaQuestion, 5> triviaQuestions{{
+     {"Which ocean is the largest?",
+      {"Atlantic", "Indian", "Pacific", "Arctic"}, 2},
+     {"Which instrument typically has 88 keys?",
+-     {"Guitar", "Piano", "Violin", "Trumpet"}, 1}
++     {"Guitar", "Piano", "Violin", "Trumpet"}, 1},
++    {"What is the chemical symbol for gold?", {"Ag", "Fe", "Au", "Cu"}, 2},
++    {"How many minutes are in two hours?", {"60", "90", "100", "120"}, 3},
++    {"Which animal is a mammal?", {"Dolphin", "Shark", "Trout", "Octopus"}, 0},
++    {"Which continent contains Brazil?", {"Asia", "South America", "Europe", "Africa"}, 1},
++    {"What is 9 multiplied by 7?", {"56", "72", "63", "81"}, 2},
++    {"Which gas do plants absorb during photosynthesis?", {"Oxygen", "Helium", "Hydrogen", "Carbon dioxide"}, 3},
++    {"Which shape has three sides?", {"Triangle", "Square", "Pentagon", "Circle"}, 0},
++    {"Which planet is closest to the Sun?", {"Earth", "Mercury", "Saturn", "Neptune"}, 1},
++    {"How many players are on the field for one football team at the start of a match?", {"Nine", "Ten", "Eleven", "Twelve"}, 2},
++    {"Which language is primarily spoken in Brazil?", {"Spanish", "French", "English", "Portuguese"}, 3},
++    {"What is the largest living land animal?", {"African elephant", "Giraffe", "Hippopotamus", "Rhinoceros"}, 0},
++    {"How many degrees are in a right angle?", {"45", "90", "180", "360"}, 1},
++    {"Which organ pumps blood around the body?", {"Liver", "Lung", "Heart", "Kidney"}, 2},
++    {"Which month comes immediately after September?", {"August", "November", "December", "October"}, 3},
++    {"Which is the smallest prime number?", {"2", "1", "3", "0"}, 0}
+ }};
+diff --git a/src/game/TriviaGame.cpp b/src/game/TriviaGame.cpp
+index bdc7576..d8055a6 100644
+--- a/src/game/TriviaGame.cpp
++++ b/src/game/TriviaGame.cpp
+@@ -49,7 +49,7 @@ void TriviaGame::finishRound()
+ {
+     if (phase != TriviaPhase::Question) return;
+     for (const auto &[id, submitted] : answers)
+-        if (submitted == triviaQuestions[round].correct) ++scores.at(id);
++        if (submitted == triviaQuestions[questions[round]].correct) ++scores.at(id);
+     phase = TriviaPhase::Result;
+ }
+ 
+@@ -71,7 +71,7 @@ GameActionResult TriviaGame::next(
+         return {409, "The game has moved on. Try again"};
+     if (phase != TriviaPhase::Result) return {409, "Wait for the round results"};
+ 
+-    if (round + 1 == triviaQuestions.size())
++    if (round + 1 == questions.size())
+         phase = TriviaPhase::Finished;
+     else
+     {
+@@ -90,6 +90,7 @@ GameActionResult TriviaGame::replay(
+     if (expectedGame != generation) return {409, "The game has moved on. Try again"};
+     if (phase != TriviaPhase::Finished) return {409, "Finish this game first"};
+ 
++    questions = selectQuestions(questions);
+     ++generation;
+     round = 0;
+     answers.clear();
+diff --git a/src/game/TriviaGame.h b/src/game/TriviaGame.h
+index c7219c6..01014f8 100644
+--- a/src/game/TriviaGame.h
++++ b/src/game/TriviaGame.h
+@@ -1,6 +1,6 @@
+ #pragma once
+ 
+-#include "Questions.h"
++#include "QuestionSelection.h"
+ #include "../models/Player.h"
+ #include <string>
+ #include <chrono>
+@@ -21,6 +21,7 @@ struct TriviaGame
+     std::vector<Player> players;
+     std::unordered_map<std::string, int> answers;
+     std::unordered_map<std::string, int> scores;
++    QuestionSelection questions = selectQuestions();
+     std::size_t round = 0;
+     unsigned int generation = 1;
+     TriviaPhase phase = TriviaPhase::Question;
+diff --git a/tests/trivia_replay.cpp b/tests/trivia_replay.cpp
+new file mode 100644
+index 0000000..4d85e6e
+--- /dev/null
++++ b/tests/trivia_replay.cpp
+@@ -0,0 +1,40 @@
++#include "../src/game/TriviaGame.h"
++#include <cassert>
++#include <set>
++
++int main()
++{
++    for (int trial = 0; trial < 100; ++trial)
++    {
++        TriviaGame game{"host", {{"host", "Colin"}, {"guest", "Guest"}}};
++        const auto initial = game.questions;
++        assert(std::set<std::size_t>(initial.begin(), initial.end()).size() == 5);
++        for (int round = 1; round <= 5; ++round)
++        {
++            const auto correct = triviaQuestions[game.questions[game.round]].correct;
++            assert(game.answer("host", correct, round, 1).status == 200);
++            assert(game.answer("guest", (correct + 1) % 4, round, 1).status == 200);
++            assert(game.next("host", round, 1).status == 200);
++        }
++        assert(game.phase == TriviaPhase::Finished);
++        assert(game.scores.at("host") == 5);
++        assert(game.scores.at("guest") == 0);
++        assert(game.replay("guest", 1).status == 403);
++        assert(game.replay("host", 1).status == 200);
++        assert(game.generation == 2 && game.round == 0);
++        assert(game.scores.at("host") == 0);
++        assert(std::set<std::size_t>(game.questions.begin(), game.questions.end()).size() == 5);
++        for (auto id : game.questions)
++        {
++            assert(id < triviaQuestions.size());
++            assert(std::find(initial.begin(), initial.end(), id) == initial.end());
++        }
++        assert(game.answer("host", 0, 1, 1).status == 409);
++        const auto snapshot = game.questions;
++        auto copied = game;
++        assert(copied.questions == snapshot);
++    }
++    TriviaGame timed{"host", {{"host", "Colin"}}};
++    assert(timed.expire(timed.deadline));
++    assert(timed.phase == TriviaPhase::Result && timed.scores.at("host") == 0);
++}
+-- 
+2.51.1
+

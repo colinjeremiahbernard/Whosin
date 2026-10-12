@@ -1,0 +1,148 @@
+From 1e7a8c8d4dbb2a40de1a564d2ee0affe16722d5e Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Sun, 11 Oct 2026 20:04:33 -0400
+Subject: [PATCH] Polish mobile game layout and round feedback
+
+---
+ static/game-view.js |  4 ++++
+ static/game.js      |  1 +
+ static/index.html   | 20 +++++++++---------
+ static/styles.css   | 50 +++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 65 insertions(+), 10 deletions(-)
+
+diff --git a/static/game-view.js b/static/game-view.js
+index 5a81629..668743d 100644
+--- a/static/game-view.js
++++ b/static/game-view.js
+@@ -7,6 +7,7 @@ window.whosinGameView = (game, context, busy, act) => {
+   const question = game.phase === "question";
+   const finished = game.phase === "finished";
+   element("game-panel").hidden = false;
++  element("game-panel").dataset.phase = game.phase;
+   element("round-label").textContent = finished ? "FINAL RESULTS"
+     : `ROUND ${game.round} OF ${game.totalRounds}`;
+   element("question").textContent = finished ? "Thanks for playing!" : game.question;
+@@ -22,6 +23,9 @@ window.whosinGameView = (game, context, busy, act) => {
+       if (!question && index === game.correctAnswer) {
+         button.classList.add("correct");
+         button.textContent += " — Correct answer";
++      } else if (!question && me?.answer === index) {
++        button.classList.add("incorrect");
++        button.textContent += " — Your answer";
+       }
+       button.addEventListener("click", () => act("answer", { answer: index }));
+       element("answer-options").append(button);
+diff --git a/static/game.js b/static/game.js
+index 768dabf..55fea3d 100644
+--- a/static/game.js
++++ b/static/game.js
+@@ -64,6 +64,7 @@
+ 
+   window.addEventListener("whosin.roomState", (event) => {
+     const next = event.detail;
++    document.body.classList.toggle("playing", !!next && next.room.status !== "waiting");
+     if (!next || next.room.status === "waiting") {
+       window.whosinTimer.update(null);
+       context = null;
+diff --git a/static/index.html b/static/index.html
+index e40007a..a2183f1 100644
+--- a/static/index.html
++++ b/static/index.html
+@@ -4,13 +4,13 @@
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <title>Whosin — Who's in? Let's play.</title>
+-  <link rel="stylesheet" href="/static/styles.css?v=6">
+-  <script src="/static/api.js?v=6" defer></script>
+-  <script src="/static/websocket.js?v=6" defer></script>
+-  <script src="/static/game-view.js?v=6" defer></script>
+-  <script src="/static/timer.js?v=6" defer></script>
+-  <script src="/static/game.js?v=6" defer></script>
+-  <script src="/static/app.js?v=6" defer></script>
++  <link rel="stylesheet" href="/static/styles.css?v=7">
++  <script src="/static/api.js?v=7" defer></script>
++  <script src="/static/websocket.js?v=7" defer></script>
++  <script src="/static/game-view.js?v=7" defer></script>
++  <script src="/static/timer.js?v=7" defer></script>
++  <script src="/static/game.js?v=7" defer></script>
++  <script src="/static/app.js?v=7" defer></script>
+ </head>
+ <body>
+   <main>
+@@ -41,12 +41,12 @@
+     <section id="lobby" class="card" hidden>
+       <p class="eyebrow">YOUR ROOM</p>
+       <h2 id="lobby-code"></h2>
+-      <p>Share this code with your friends.</p>
++      <p class="lobby-help">Share this code with your friends.</p>
+       <h3>Players</h3>
+       <ul id="players"></ul>
+       <p id="game-status" role="status" aria-live="polite"></p>
+-      <p>Trivia: 5 rounds. 20 seconds per question. A correct answer earns 1 point.</p>
+-      <p>Disconnected players have 30 seconds to reconnect.</p>
++      <p class="lobby-help">Trivia: 5 rounds. 20 seconds per question. A correct answer earns 1 point.</p>
++      <p class="lobby-help">Disconnected players have 30 seconds to reconnect.</p>
+       <button id="start-game" type="button" hidden>Start Game</button>
+       <button id="leave-room" type="button">Leave Room</button>
+     </section>
+diff --git a/static/styles.css b/static/styles.css
+index 6b717f3..193c92f 100644
+--- a/static/styles.css
++++ b/static/styles.css
+@@ -61,3 +61,53 @@ input:focus-visible, button:focus-visible {
+   .cards, .answers { grid-template-columns: 1fr; }
+   main { padding-top: 28px; }
+ }
++
++/* Keep the question prominent once the game starts. */
++body { min-height: 100dvh; }
++main { padding-bottom: max(28px, env(safe-area-inset-bottom)); }
++input { font-size: 16px; }
++button { touch-action: manipulation; }
++.card, li { overflow-wrap: anywhere; }
++#question { font-size: clamp(1.35rem, 4vw, 1.8rem); line-height: 1.4; }
++#round-label { color: #a6ffcb; font-weight: 750; }
++#round-timer {
++  display: inline-block;
++  margin: 0 0 20px;
++  padding: 8px 14px;
++  border-radius: 12px;
++  background: #101322;
++  color: #f5f6ff;
++  font-weight: 750;
++  font-variant-numeric: tabular-nums;
++}
++#round-status { padding: 12px 14px; background: #101322; border-radius: 12px; }
++#game-panel[data-phase="result"] #round-status { border-left: 4px solid #a6ffcb; }
++#game-panel[data-phase="finished"] { border-color: #a6ffcb; }
++.answer-option { min-height: 64px; line-height: 1.5; }
++.answer-option:disabled { opacity: 0.85; }
++.answer-option.incorrect { border: 2px solid #ffb4b4; background: #492c39; opacity: 1; }
++#leave-room { background: transparent; color: #c3c8df; border: 1px solid #677393; }
++#leave-room:hover { background: #2c3550; }
++.playing header { margin-bottom: 12px; }
++.playing header h1, .playing header > p:not(.brand):not(#connection-status),
++.playing .lobby-help, .playing #lobby > h3, .playing #game-status { display: none; }
++.playing #lobby { padding: 16px 20px; }
++.playing #lobby-code { font-size: 1.6rem; margin: 0; }
++.playing #lobby .eyebrow { margin: 0 0 4px; }
++.playing #players { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0; }
++.playing #players li { border: 0; padding: 0; font-size: 0.9rem; }
++.playing #leave-room { margin-top: 6px; min-height: 44px; }
++#score-list li { line-height: 1.5; }
++@media (max-width: 620px) {
++  main { padding: 20px 14px max(24px, env(safe-area-inset-bottom)); }
++  .card { padding: 20px; border-radius: 16px; }
++  header { margin-bottom: 20px; }
++  .playing main { padding-top: 12px; }
++  .playing .brand { margin: 4px 0; }
++  .playing #connection-status { margin: 4px 0; font-size: 0.85rem; }
++  .playing #message:empty { display: none; }
++  .game-card { margin-top: 12px; }
++}
++@media (prefers-reduced-motion: reduce) {
++  *, *::before, *::after { scroll-behavior: auto !important; }
++}
+-- 
+2.51.1
+

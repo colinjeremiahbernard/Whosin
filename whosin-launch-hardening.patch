@@ -1,0 +1,2693 @@
+From 501032e9d72141cc610fbcd8236a1374903b7a29 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Mon, 12 Oct 2026 18:05:38 +0900
+Subject: [PATCH] Harden sessions, bound resources and document live MVP
+
+---
+ .dockerignore                |    2 +
+ README.md                    | 1779 ++--------------------------------
+ docs/OPERATIONS.md           |   53 +
+ src/main.cpp                 |   19 +-
+ src/models/Player.h          |    1 +
+ src/routes/GameRoutes.h      |    3 +-
+ src/routes/RoomRoutes.h      |   11 +-
+ src/routes/WebRoutes.h       |   33 +-
+ src/security/RateLimiter.h   |   38 +
+ src/security/RequestGuard.h  |   64 ++
+ src/security/SocketGuard.h   |   37 +
+ src/services/IdGenerator.cpp |    3 +-
+ src/services/RoomService.cpp |   24 +-
+ src/services/RoomService.h   |    5 +-
+ static/api.js                |    5 +
+ static/app.js                |   15 +-
+ static/index.html            |   14 +-
+ static/websocket.js          |    8 +-
+ tests/launch_smoke.py        |  113 +++
+ tests/room_limits.cpp        |   30 +
+ tests/security_limits.cpp    |   26 +
+ 21 files changed, 547 insertions(+), 1736 deletions(-)
+ create mode 100644 docs/OPERATIONS.md
+ create mode 100644 src/security/RateLimiter.h
+ create mode 100644 src/security/RequestGuard.h
+ create mode 100644 src/security/SocketGuard.h
+ create mode 100644 tests/launch_smoke.py
+ create mode 100644 tests/room_limits.cpp
+ create mode 100644 tests/security_limits.cpp
+
+diff --git a/.dockerignore b/.dockerignore
+index 5121064..f376e1e 100644
+--- a/.dockerignore
++++ b/.dockerignore
+@@ -3,6 +3,8 @@
+ !CMakeLists.txt
+ !src/
+ !src/main.cpp
++!src/security/
++!src/security/**
+ !src/config/
+ !src/config/**
+ !src/game/
+diff --git a/README.md b/README.md
+index 0d1bc0a..3988b28 100644
+--- a/README.md
++++ b/README.md
+@@ -1,1733 +1,104 @@
+-# WHOSIN
+-
+-> **Who’s in? Let’s play.**
+-
+-Whosin is a browser-based, real-time multiplayer game designed for spontaneous group play.
+-
+-One person creates a game, receives a short room code, and shares it with the group. Everyone joins from their own phone, tablet, or laptop using a browser.
+-
+-No account.  
+-No app download.  
+-No installation.
+-
+-The same public Whosin URL can be used again and again for new games.
+-
+----
+-
+-# 1. Product Vision
+-
+-Whosin should make starting a multiplayer game almost frictionless.
+-
+-The ideal experience is:
+-
+-1. Open Whosin.
+-2. Tap **Create Game**.
+-3. Receive a short room code.
+-4. Share the code with friends.
+-5. Everyone joins from their own device.
+-6. The host starts the game.
+-7. Players interact in real time.
+-8. Everyone sees synchronized results.
+-9. The game ends with a clear result.
+-10. The group can immediately play again.
+-
+-The product should feel closer to joining a conversation than installing and configuring a game.
+-
+----
+-
+-# 2. Core Principles
+-
+-## Zero Friction
+-
+-No account creation, passwords, downloads, or app installation.
+-
+-## Real-Time
+-
+-The game state must remain synchronized across every connected device.
+-
+-## Room-Based
+-
+-Every game exists inside a temporary room identified by a short human-readable code.
+-
+-## Host-Controlled
+-
+-One player acts as the host and controls game progression.
+-
+-## Replayable
+-
+-Finishing a game should naturally lead into another game.
+-
+-## Device Agnostic
+-
+-The experience must work well on:
+-
+-- iPhone
+-- Android phones
+-- Tablets
+-- Windows laptops
+-- Mac laptops
+-- Desktop browsers
+-
+-## Mobile First
+-
+-Most players will probably hold their phones while playing together in the same physical space.
+-
+-## Simple to Understand
+-
+-Players should be able to join and begin playing without technical knowledge or lengthy instructions.
+-
+----
+-
+-# 3. Working Brand
+-
+-## Name
+-
+-**Whosin**
+-
+-## Brand Idea
+-
+-The name comes from:
+-
+-> **Who’s in?**
+-
+-It represents the social action required to start a game: getting people into the room.
+-
+-## Primary Tagline
++# Whosin
+ 
+ **Who’s in? Let’s play.**
+ 
+-## Brand Vocabulary
+-
+-Use natural language throughout the interface:
+-
+-- Create Game
+-- Join Game
+-- Room Code
+-- Players
+-- Host
+-- Start Game
+-- Next Round
+-- Play Again
+-- Leave Game
+-
+-Avoid unnecessary technical terminology in the player experience.
+-
+----
+-
+-# 4. MVP Definition
+-
+-The first release must provide a complete playable multiplayer experience.
+-
+-## Required MVP Functionality
+-
+-### Landing Page
+-
+-Players can:
+-
+-- Create a game
+-- Join an existing game
+-
+-### Create Game
+-
+-The creator becomes the host.
+-
+-The server generates a unique room code.
+-
+-Example:
+-
+-```text
+-WHOSIN
+-
+-Create a Game
+-
+-Room Code:
+-7K4P
+-```
+-
+-### Join Game
+-
+-A player enters:
+-
+-- Room code
+-- Display name
+-
+-Example:
+-
+-```text
+-JOIN GAME
+-
+-Room Code
+-[ 7 K 4 P ]
+-
+-Your Name
+-[ Colin ]
+-
+-[ JOIN ]
+-```
+-
+-### Lobby
+-
+-Players see:
+-
+-- Room code
+-- Player list
+-- Host indicator
+-- Start button for host
+-- Waiting state for other players
+-
+-### Game
+-
+-The game engine controls:
+-
+-- Current round
+-- Timer
+-- Player interaction
+-- Submitted answers/actions
+-- Round completion
+-- Scores
+-- Progression
+-
+-### Results
+-
+-Players see:
+-
+-- Round result
+-- Current scores
+-- Final result where applicable
+-- Next-round control
+-
+-### Replay
+-
+-The host can start another game without requiring everyone to leave and reconnect.
+-
+----
+-
+-# 5. Game Design
+-
+-Whosin consists of a reusable multiplayer room platform and one or more game modes.
+-
+-The architecture must separate the room system from the game engine so additional games can be introduced later.
+-
+-## Game Engine Requirements
+-
+-A game mode should define:
+-
+-```text
+-Game Configuration
+-        ↓
+-Rounds
+-        ↓
+-Player Actions
+-        ↓
+-Validation
+-        ↓
+-Scoring
+-        ↓
+-Round Result
+-        ↓
+-Next Round
+-        ↓
+-Final Result
+-```
+-
+-The room system should not need to understand the individual rules of every game.
+-
+----
+-
+-# 6. Room Model
+-
+-Every active game has a room.
+-
+-Example:
+-
+-```text
+-Room
+-├── Code: 7K4P
+-├── Host: player_01
+-├── Status: LOBBY
+-├── Players
+-│   ├── player_01
+-│   ├── player_02
+-│   ├── player_03
+-│   └── player_04
+-├── Game State
+-└── Created At
+-```
+-
+-## Room States
+-
+-```text
+-LOBBY
+-  ↓
+-STARTING
+-  ↓
+-PLAYING
+-  ↓
+-ROUND_RESULT
+-  ↓
+-PLAYING
+-  ↓
+-FINAL_RESULT
+-  ↓
+-REPLAY / CLOSED
+-```
+-
+----
+-
+-# 7. Room Codes
+-
+-Room codes should be:
+-
+-- Short
+-- Easy to read
+-- Easy to communicate verbally
+-- Case-insensitive
+-- Difficult to accidentally confuse
+-
+-Recommended initial format:
+-
+-```text
+-4 characters
+-A-Z + 2-9
+-```
+-
+-Exclude visually confusing characters such as:
+-
+-```text
+-0
+-O
+-I
+-1
+-```
+-
+-Examples:
+-
+-```text
+-7K4P
+-M8RX
+-T6QD
+-```
+-
+-Room codes only need to be unique among active rooms.
+-
+----
+-
+-# 8. Player Identity
+-
+-Whosin does not require accounts in the MVP.
+-
+-A player receives a temporary identity when joining a room.
+-
+-Example:
+-
+-```text
+-playerId = UUID
+-```
+-
+-The player also has:
+-
+-```text
+-displayName
+-```
+-
+-The identity exists only for the relevant game session.
+-
+-No password or permanent profile is required.
+-
+----
+-
+-# 9. Host
+-
+-The player who creates a room becomes the host.
+-
+-The host can:
+-
+-- Start the game
+-- Advance the game when appropriate
+-- Start another round/game
+-- End the room
+-
+-The server, rather than the client, must enforce host permissions.
+-
+-If the host disconnects, the system should support host reassignment.
++Play online: https://whosin-f948.onrender.com
+ 
+-Recommended initial behavior:
++Whosin is a browser-based multiplayer trivia game. Create a room, share its
++six-character code, and join from phones or computers. No accounts or installs.
+ 
+-> Automatically promote the longest-connected remaining player.
++## How to play
+ 
+----
++1. Create a room with your display name.
++2. Friends enter the room code and their names (up to 12 players).
++3. The host starts a five-round game.
++4. Each question has a server-controlled 20-second timer. Correct answers earn
++   one point; unanswered questions earn zero.
++5. The host advances after the round results and reveals the final scoreboard.
++6. Play Again resets scores and selects five questions excluding the previous game.
+ 
+-# 10. Technology Stack
++The question bank contains 20 questions. Players have 30 seconds to reconnect
++after the server detects a disconnect. A departed host is replaced by the first
++remaining player. Leaving immediately removes the player; empty rooms disappear.
+ 
+-Whosin will use a **C++-centered backend architecture**.
++## Implementation
+ 
+-## Frontend
++- C++20 and Crow: HTTP, WebSockets, room state and authoritative scoring.
++- HTML, CSS and JavaScript: responsive browser client, no frontend framework.
++- CMake: builds the server.
++- Docker: Linux deployment with pinned Crow v1.3.2.
++- Render: one running service, HTTPS and WSS supplied by the hosting platform.
+ 
+-The browser client will initially use:
++All active state is in memory. Restarts and deployments clear rooms. Multiple
++server instances are unsupported. PostgreSQL and Redis are not required or
++implemented in this MVP.
+ 
+-- HTML
+-- CSS
+-- JavaScript
++## Windows development
+ 
+-The frontend should remain lightweight and framework-independent during the initial build.
++Install Crow through your existing vcpkg setup, then configure CMake with that
++toolchain. For an already configured checkout:
+ 
+-A frontend framework can be introduced later if the application complexity justifies it.
+-
+-## Backend
+-
+-**C++20**
+-
+-The C++ server will contain:
+-
+-- HTTP handling
+-- WebSocket connections
+-- Room management
+-- Player management
+-- Game state
+-- Game rules
+-- Validation
+-- Scoring
+-- Host permissions
+-- Timers
+-- Reconnection handling
+-
+-## Build System
+-
+-**CMake**
+-
+-CMake will manage:
+-
+-- C++ compilation
+-- Dependencies
+-- Development builds
+-- Test builds
+-- Production builds
+-
+-## Real-Time Communication
+-
+-**WebSocket**
+-
+-WebSockets provide persistent, bidirectional communication between:
+-
+-```text
+-Browser ↔ C++ Game Server
+-```
+-
+-## Database
+-
+-**PostgreSQL**
+-
+-PostgreSQL will be used for durable data such as:
+-
+-- Game metadata
+-- Completed game records
+-- Scores where persistence is required
+-- Future analytics
+-- Future account functionality
+-
+-## Ephemeral State
+-
+-The initial development version should keep active room state in the C++ server.
+-
+-**Redis is not required for the first local implementation.**
+-
+-Redis can be introduced later for:
+-
+-- Distributed room state
+-- Pub/Sub
+-- Multi-server synchronization
+-- Horizontal scaling
+-- Room expiration
+-
+-This prevents unnecessary infrastructure from being introduced before it is needed.
+-
+----
+-
+-# 11. High-Level Architecture
+-
+-```text
+-                         INTERNET
+-                            │
+-                            ▼
+-                   ┌──────────────────┐
+-                   │     Browser      │
+-                   │                  │
+-                   │ HTML             │
+-                   │ CSS              │
+-                   │ JavaScript       │
+-                   └────────┬─────────┘
+-                            │
+-                         HTTPS
+-                            │
+-                         WSS
+-                            │
+-                   ┌────────▼─────────┐
+-                   │   C++20 Server   │
+-                   │                  │
+-                   │ HTTP Server      │
+-                   │ WebSocket Server │
+-                   │ Room Manager     │
+-                   │ Game Engine      │
+-                   │ Player Manager   │
+-                   │ Validation       │
+-                   │ Scoring          │
+-                   └────────┬─────────┘
+-                            │
+-                     ┌──────▼──────┐
+-                     │ PostgreSQL  │
+-                     │             │
+-                     │ Durable     │
+-                     │ Game Data   │
+-                     └─────────────┘
+-```
+-
+-Future scaling:
+-
+-```text
+-                         INTERNET
+-                            │
+-                            ▼
+-                     Load Balancer
+-                            │
+-              ┌─────────────┼─────────────┐
+-              │             │             │
+-              ▼             ▼             ▼
+-         C++ Server A  C++ Server B  C++ Server C
+-              │             │             │
+-              └─────────────┼─────────────┘
+-                            │
+-                           Redis
+-                            │
+-                       PostgreSQL
+-```
+-
+----
+-
+-# 12. Server Authority
+-
+-The client must never be trusted to determine important game outcomes.
+-
+-For example, the browser may send:
+-
+-```text
+-SUBMIT_ANSWER
+-```
+-
+-The server determines:
+-
+-```text
+-Is the player in the room?
+-Is the round active?
+-Has the player already submitted?
+-Is the answer valid?
+-What score should be awarded?
+-Has the round completed?
+-```
+-
+-The server then updates the game state and broadcasts the result.
+-
+-This protects against:
+-
+-- Score manipulation
+-- Duplicate submissions
+-- Invalid actions
+-- Client-side timer manipulation
+-- Host permission bypasses
+-
+----
+-
+-# 13. WebSocket Architecture
+-
+-The WebSocket connection is the primary real-time channel.
+-
+-## Client → Server
+-
+-Example events:
+-
+-```text
+-room.create
+-room.join
+-room.leave
+-
+-game.start
+-game.action
+-game.next
+-game.replay
+-game.end
+-```
+-
+-## Server → Client
+-
+-Example events:
+-
+-```text
+-room.created
+-room.updated
+-
+-player.joined
+-player.left
+-
+-game.started
+-game.state
+-game.actionAccepted
+-game.roundComplete
+-game.finished
+-
+-host.changed
+-
+-error
+-```
+-
+-The protocol should use structured JSON initially.
+-
+-Example:
+-
+-```json
+-{
+-  "type": "room.join",
+-  "payload": {
+-    "roomCode": "7K4P",
+-    "displayName": "Colin"
+-  }
+-}
+-```
+-
+-The exact event names and payload schemas may evolve during implementation.
+-
+----
+-
+-# 14. Game State
+-
+-A representative server-side state:
+-
+-```cpp
+-GameState {
+-    RoomCode roomCode;
+-    GameStatus status;
+-
+-    PlayerId hostId;
+-
+-    std::vector<Player> players;
+-
+-    int currentRound;
+-    int totalRounds;
+-
+-    Timestamp roundStartedAt;
+-    Timestamp roundEndsAt;
+-
+-    std::unordered_map<PlayerId, int> scores;
+-
+-    GameData gameData;
+-};
+-```
+-
+-The actual implementation should use strongly typed C++ structures rather than loosely typed data wherever practical.
+-
+----
+-
+-# 15. Timer Architecture
+-
+-Timers must be server-authoritative.
+-
+-The server maintains the authoritative round deadline.
+-
+-Example:
+-
+-```text
+-roundEndsAt = 12:35:20.000
+-```
+-
+-The client receives the deadline and calculates the remaining display time.
+-
+-The server determines when the round has actually ended.
+-
+-This prevents clients from manipulating or drifting away from the official timer.
+-
+----
+-
+-# 16. Disconnect Handling
+-
+-Players will inevitably lose connectivity.
+-
+-Whosin should distinguish between:
+-
+-## Temporary Disconnect
+-
+-Keep the player in the room for a short grace period.
+-
+-If the player reconnects, restore their session.
+-
+-## Permanent Departure
+-
+-Remove the player after the grace period.
+-
+-## Host Disconnect
+-
+-Transfer host authority according to the host reassignment rule.
+-
+-## Empty Room
+-
+-If no players remain, the room should eventually expire.
+-
+----
+-
+-# 17. Room Expiration
+-
+-Rooms are temporary by default.
+-
+-Example policy:
+-
+-```text
+-Active room:
+-expires after configurable inactivity period
+-
+-Empty room:
+-expires after shorter period
+-
+-Completed game:
+-may be persisted as historical data
+-```
+-
+-The initial implementation may use C++ timers for room cleanup.
+-
+-Redis TTLs can be introduced when distributed deployment is required.
+-
+----
+-
+-# 18. Database Model
+-
+-Initial PostgreSQL schema:
+-
+-```text
+-games
+--------------------------
+-id
+-room_code
+-status
+-game_type
+-created_at
+-started_at
+-ended_at
+-
+-
+-game_players
+--------------------------
+-id
+-game_id
+-player_id
+-display_name
+-joined_at
+-final_score
+-
+-
+-game_rounds
+--------------------------
+-id
+-game_id
+-round_number
+-started_at
+-ended_at
+-round_data
+-result_data
++```powershell
++cmake --build build
++.\build\Debug\whosin.exe
+ ```
+ 
+-The schema should remain flexible enough to support multiple game modes.
++Run from the repository root and open http://localhost:8080.
++`PORT` overrides 8080; invalid values cause startup to fail clearly.
+ 
+----
++## Docker and hosting
+ 
+-# 19. HTTP API
+-
+-The C++ server may expose a small HTTP API.
+-
+-Initial endpoints:
+-
+-```text
+-GET  /health
+-POST /rooms
+-GET  /rooms/:code
++```sh
++docker build -t whosin .
++docker run --rm -p 8080:8080 whosin
+ ```
+ 
+-Real-time gameplay actions should primarily use WebSockets.
+-
+-The REST API should not become a replacement for the real-time protocol.
++See [deployment instructions](docs/DEPLOYMENT.md) and the
++[operations guide](docs/OPERATIONS.md). `/health` returns `{"status":"ok"}`
++when the process is responding. Free hosting can sleep; allow time for startup.
+ 
+----
++## Launch safeguards
+ 
+-# 20. Frontend Structure
++- Private 32-character session tokens authorize room reads and player actions;
++  visible player IDs alone do not grant access. Tokens stay in per-tab storage.
++- HTTP request budgets, bounded rate-limit bookkeeping and 4 KiB body validation.
++- Maximum 100 simultaneous rooms, 12 players per room and 512 WebSocket connections.
++- WebSocket frames capped at 1 KiB and messages limited to 20 per second per socket.
++- Server validates host permissions, round generation, answer choices and deadlines.
++- Security headers restrict script sources, framing, and browser device permissions.
++- Four worker threads and a non-root Docker process.
++- Aggregate room, request and HTTP error counts logged once per minute without names or tokens.
+ 
+-The initial frontend should be simple:
++Request limits use the directly connected peer address, never an untrusted
++forwarded header. Behind a proxy, multiple visitors can share a budget; see the
++operations guide. These safeguards do not replace upstream DDoS protection.
+ 
+-```text
+-apps/
+-└── web/
+-    ├── index.html
+-    ├── join.html
+-    ├── room.html
+-    ├── css/
+-    │   └── styles.css
+-    ├── js/
+-    │   ├── app.js
+-    │   ├── websocket.js
+-    │   ├── room.js
+-    │   └── game.js
+-    └── assets/
+-```
+-
+-This structure can evolve into a frontend framework later if necessary.
+-
+----
+-
+-# 21. C++ Server Structure
++## Verification
+ 
+-Recommended initial structure:
++`tests/trivia_replay.cpp` checks scoring, replays and stale submissions.
++`tests/security_limits.cpp` checks rate limits and socket boundaries.
++`tests/room_limits.cpp` checks room capacity and private-token authorization.
++`tests/launch_smoke.py` runs HTTP and multiplayer checks against a local binary.
++The WebSocket smoke test additionally requires Python's `websockets`.
+ 
+-```text
+-server/
+-├── CMakeLists.txt
+-├── include/
+-│   ├── server/
+-│   ├── room/
+-│   ├── player/
+-│   ├── game/
+-│   └── protocol/
+-│
+-├── src/
+-│   ├── main.cpp
+-│   ├── server/
+-│   ├── room/
+-│   ├── player/
+-│   ├── game/
+-│   └── protocol/
+-│
+-└── tests/
++```sh
++g++ -std=c++20 tests/trivia_replay.cpp src/game/TriviaGame.cpp -o trivia-test
++./trivia-test
++g++ -std=c++20 -pthread tests/security_limits.cpp -o limits-test
++./limits-test
++g++ -std=c++20 -pthread tests/room_limits.cpp src/services/RoomService.cpp src/services/IdGenerator.cpp -o room-test
++./room-test
++python tests/launch_smoke.py /absolute/path/to/whosin
+ ```
+ 
+-The exact library-specific structure will be determined after selecting the C++ networking stack.
+-
+----
+-
+-# 22. C++ Dependency Strategy
+-
+-Dependencies should be introduced deliberately.
+-
+-The server requires libraries for:
+-
+-- HTTP
+-- WebSockets
+-- JSON
+-- PostgreSQL connectivity
+-- Testing
+-
+-Candidate libraries may include established C++ ecosystem solutions such as:
+-
+-- Boost.Asio / Boost.Beast
+-- uWebSockets
+-- Crow
+-- Drogon
+-- nlohmann/json
+-- libpq / PostgreSQL client libraries
+-
+-The final selection should be made during the server-foundation phase based on:
+-
+-- C++20 compatibility
+-- Windows support
+-- WebSocket support
+-- Documentation
+-- Maintenance
+-- Performance
+-- Build complexity
+-- License compatibility
+-
+-We should **not install every candidate library**.
+-
+----
+-
+-# 23. Security
+-
+-Even without accounts, the application requires security controls.
+-
+-Required:
+-
+-- HTTPS
+-- Secure WebSockets
+-- Server-side validation
+-- Input length limits
+-- Display-name sanitization
+-- Rate limiting
+-- Room-code validation
+-- Host permission validation
+-- Payload size limits
+-- Abuse prevention
+-- CORS configuration
+-- Security headers
+-
+-Player input must always be considered untrusted.
+-
+----
+-
+-# 24. Display Names
+-
+-Display names should have:
+-
+-- Maximum length
+-- Minimum valid length
+-- Character validation
+-- Sanitization
+-
+-The browser must never inject raw player input into HTML.
+-
+----
+-
+-# 25. Anti-Cheating
+-
+-Whosin is intended primarily for social play.
+-
+-The server must nevertheless control:
+-
+-- Scores
+-- Timers
+-- Round completion
+-- Valid actions
+-- Player membership
+-- Host permissions
+-
+-The client should submit actions, not results.
+-
+-Bad:
+-
+-```text
+-{
+-    "score": 500
+-}
+-```
+-
+-Good:
+-
+-```text
+-{
+-    "answer": "X"
+-}
+-```
+-
+-The C++ game engine calculates the score.
+-
+----
+-
+-# 26. Error Handling
+-
+-Player-facing errors should be understandable.
+-
+-Instead of:
+-
+-```text
+-ROOM_NOT_FOUND
+-```
+-
+-show:
+-
+-> **We couldn't find that room.**  
+-> Check the code and try again.
+-
+-Examples:
+-
+-> **That room is full.**
+-
+-> **The game has already started.**
+-
+-> **You've been disconnected. Reconnecting…**
+-
+-> **The host has left. Finding a new host…**
+-
+-Technical details should be logged server-side.
+-
+----
+-
+-# 27. Logging
+-
+-The C++ server should provide structured logging for:
+-
+-- Server startup
+-- Server shutdown
+-- Room creation
+-- Room destruction
+-- Player joins
+-- Player leaves
+-- Host changes
+-- Game start
+-- Game completion
+-- Errors
+-- WebSocket failures
+-
+-Do not log unnecessary personal information.
+-
+----
+-
+-# 28. Observability
+-
+-Production monitoring should eventually include:
+-
+-```text
+-active_rooms
+-active_players
+-games_started
+-games_completed
+-average_players_per_game
+-average_game_duration
+-disconnect_rate
+-reconnect_rate
+-```
+-
+-A health endpoint should report whether the server is operational.
+-
+----
+-
+-# 29. Privacy
+-
+-MVP should collect as little personal information as possible.
+-
+-No account is required.
+-
+-Player names should be considered temporary game-session data.
+-
+-The system should have a clear privacy policy before public launch.
+-
+-Do not collect:
+-
+-- Contacts
+-- Location
+-- Phone numbers
+-- Email addresses
+-
+-unless a future feature explicitly requires them.
+-
+----
+-
+-# 30. Responsive UX
+-
+-The application must be mobile-first.
+-
+-## Mobile
+-
+-The interface should:
+-
+-- Use large touch targets
+-- Avoid tiny text
+-- Minimize typing
+-- Work in portrait orientation
+-- Remain usable on smaller screens
+-- Provide clear visual game states
+-
+-## Desktop
+-
+-Desktop layouts can provide:
+-
+-- Larger player lists
+-- More whitespace
+-- Larger game presentation
+-- Additional host controls
+-
+-The gameplay rules remain identical.
+-
+----
+-
+-# 31. Accessibility
+-
+-Whosin should target WCAG 2.2 AA principles where practical.
+-
+-Requirements include:
+-
+-- Keyboard navigation
+-- Visible focus states
+-- Sufficient text contrast
+-- Semantic HTML
+-- Accessible buttons
+-- Screen-reader-friendly status changes
+-- Reduced-motion consideration
+-- Avoiding color as the sole communication method
+-
+----
+-
+-# 32. Testing Strategy
+-
+-## Unit Tests
+-
+-Test:
+-
+-- Game rules
+-- Scoring
+-- Room-code generation
+-- State transitions
+-- Validation
+-- Timer logic
+-
+-## Integration Tests
+-
+-Test:
+-
+-- Room creation
+-- Joining
+-- Leaving
+-- Host transfer
+-- Game start
+-- Game progression
+-- Reconnection
+-
+-## End-to-End Tests
+-
+-Simulate multiple browser clients.
+-
+-Example:
+-
+-```text
+-Browser A → creates room
+-
+-Browser B → joins
+-
+-Browser C → joins
+-
+-Browser A → starts game
+-
+-B/C → perform actions
+-
+-Server → calculates result
+-
+-All browsers → receive identical state
+-```
+-
+-## Load Testing
+-
+-Eventually test:
+-
+-- Many simultaneous rooms
+-- Multiple players per room
+-- WebSocket connections
+-- Reconnection storms
+-- Room expiration
+-
+----
+-
+-# 33. Repository Structure
+-
+-The project will evolve toward:
+-
+-```text
+-Whosin/
+-│
+-├── README.md
+-├── .gitignore
+-├── CMakeLists.txt
+-│
+-├── apps/
+-│   └── web/
+-│
+-├── server/
+-│   ├── include/
+-│   ├── src/
+-│   └── tests/
+-│
+-├── packages/
+-│   ├── protocol/
+-│   └── game-engine/
+-│
+-├── database/
+-│   ├── migrations/
+-│   └── seeds/
+-│
+-├── tests/
+-│   ├── integration/
+-│   └── e2e/
+-│
+-└── docs/
+-```
+-
+-The initial implementation does not need every directory immediately.
+-
+-Directories should be created as the corresponding subsystem is introduced.
+-
+----
+-
+-# 34. Git Strategy
+-
+-The repository should remain clean and incremental.
+-
+-Each meaningful stage should produce a working commit.
+-
+-Examples:
+-
+-```text
+-Initial project structure
+-Add web client foundation
+-Add C++ server foundation
+-Add room management
+-Add WebSocket protocol
+-Add multiplayer lobby
+-Add game engine
+-Add scoring
+-Add replay
+-Add production configuration
+-```
+-
+-Avoid large commits containing unrelated changes.
+-
+----
+-
+-# 35. Development Phases
+-
+-## Phase 1 — Project Foundation
+-
+-Build:
+-
+-- Repository structure
+-- CMake
+-- C++ project
+-- Basic web client
+-- Development documentation
+-
+-Deliverable:
+-
+-> The project builds successfully.
+-
+----
+-
+-## Phase 2 — C++ Server
+-
+-Build:
+-
+-- HTTP server
+-- Health endpoint
+-- Basic server startup/shutdown
+-- Configuration
+-- Logging
+-
+-Deliverable:
+-
+-> The C++ server runs locally and responds to an HTTP health request.
+-
+----
+-
+-## Phase 3 — Web Client
+-
+-Build:
+-
+-- Whosin landing page
+-- Create Game interface
+-- Join Game interface
+-- Responsive layout
+-
+-Deliverable:
+-
+-> The browser presents the basic Whosin experience.
+-
+----
+-
+-## Phase 4 — WebSockets
+-
+-Build:
+-
+-- WebSocket server
+-- Client connection
+-- Connection lifecycle
+-- JSON event protocol
+-- Error handling
+-
+-Deliverable:
+-
+-> Browser and C++ server communicate in real time.
+-
+----
+-
+-## Phase 5 — Rooms
+-
+-Build:
+-
+-- Room creation
+-- Room codes
+-- Room joining
+-- Player identity
+-- Lobby
+-- Host
+-- Player list
+-
+-Deliverable:
+-
+-> Multiple browsers can enter the same room and see synchronized players.
+-
+----
+-
+-## Phase 6 — Multiplayer Game Engine
+-
+-Build:
+-
+-- Game abstraction
+-- Game state
+-- Rounds
+-- Timers
+-- Player actions
+-- Validation
+-- Scoring
+-
+-Deliverable:
+-
+-> Multiple players can complete a full game.
+-
+----
+-
+-## Phase 7 — Results and Replay
+-
+-Build:
+-
+-- Round results
+-- Final results
+-- Play Again
+-- Room reset
+-- Score handling
+-
+-Deliverable:
+-
+-> A group can immediately play another game.
+-
+----
+-
+-## Phase 8 — Resilience
+-
+-Build:
+-
+-- Reconnection
+-- Disconnect handling
+-- Host transfer
+-- Room expiration
+-- Invalid-action handling
+-
+-Deliverable:
+-
+-> Normal connection failures do not destroy the game.
+-
+----
+-
+-## Phase 9 — PostgreSQL
+-
+-Build:
+-
+-- Database connection
+-- Migrations
+-- Game persistence
+-- Historical results where appropriate
+-
+-Deliverable:
+-
+-> Durable game information can be stored safely.
+-
+----
+-
+-## Phase 10 — Production Hardening
+-
+-Build:
+-
+-- HTTPS
+-- Secure WebSockets
+-- Rate limiting
+-- Security headers
+-- Monitoring
+-- Error tracking
+-- Load testing
+-- Deployment configuration
+-
+-Deliverable:
+-
+-> Whosin is ready for controlled public use.
+-
+----
+-
+-# 36. Definition of Done — MVP
+-
+-## Entry
+-
+-- [ ] Public URL loads
+-- [ ] Mobile layout works
+-- [ ] Desktop layout works
+-- [ ] Create Game works
+-- [ ] Join Game works
+-
+-## Rooms
+-
+-- [ ] Unique room code generated
+-- [ ] Players can join
+-- [ ] Players see one another
+-- [ ] Host is identified
+-- [ ] Host can start
+-- [ ] Invalid codes are handled
+-- [ ] Full/closed rooms are handled
+-
+-## Game
+-
+-- [ ] Game state is server-authoritative
+-- [ ] Players can perform the required game action
+-- [ ] Server validates actions
+-- [ ] Timer is synchronized
+-- [ ] Scores/results synchronize
+-- [ ] All clients receive state changes
+-
+-## Resilience
+-
+-- [ ] Player disconnect/reconnect works
+-- [ ] Host departure is handled
+-- [ ] Empty rooms expire
+-- [ ] Invalid actions cannot corrupt state
+-
+-## Replay
+-
+-- [ ] Game reaches a final result
+-- [ ] Host can initiate another game
+-- [ ] Players can continue without manually creating a new room
+-
+-## Production
+-
+-- [ ] HTTPS enabled
+-- [ ] WebSockets secured
+-- [ ] Rate limiting enabled
+-- [ ] Errors monitored
+-- [ ] Health endpoint available
+-- [ ] Production environment variables secured
+-
+----
+-
+-# 37. Future Features
+-
+-These should not block MVP development.
+-
+-Potential future capabilities:
+-
+-## Multiple Game Modes
+-
+-```text
+-Whosin: Trivia
+-Whosin: Vote
+-Whosin: Bluff
+-Whosin: Word
+-Whosin: Party
+-```
+-
+-## Custom Games
+-
+-Hosts could eventually create their own question sets.
+-
+-## Persistent Profiles
+-
+-Optional accounts could allow:
+-
+-- Statistics
+-- Achievements
+-- Friends
+-- Game history
+-
+-## QR Joining
+-
+-Players could scan a QR code instead of typing the room code.
+-
+-## Share Links
+-
+-Example:
+-
+-```text
+-whosin.example/j/7K4P
+-```
+-
+-## TV / Shared-Screen Mode
+-
+-One screen displays the main game while each player uses their phone as a controller.
+-
+-## Game Packs
+-
+-The platform could eventually support themed content packs.
+-
+-## Private Rooms
+-
+-Optional room passwords or invitation links could be introduced.
+-
+----
+-
+-# 38. Product Principles for Future Development
+-
+-Every feature should be evaluated against four questions.
+-
+-### Does it make joining easier?
+-
+-If not, it needs a strong reason to exist.
+-
+-### Does it make playing together more fun?
+-
+-Whosin is fundamentally social.
+-
+-### Does it preserve the no-login/no-install promise?
+-
+-The default experience should remain frictionless.
+-
+-### Does it make another round easy?
+-
+-The product should naturally encourage:
+-
+-> **“One more game?”**
+-
+----
+-
+-# 39. Launch Experience
+-
+-The ideal first screen:
+-
+-```text
+-                         WHOSIN
+-
+-                  Who's in? Let's play.
+-
+-              ┌─────────────────────────┐
+-              │       CREATE GAME        │
+-              └─────────────────────────┘
+-
+-                         or
+-
+-              ┌─────────────────────────┐
+-              │        JOIN GAME         │
+-              └─────────────────────────┘
+-```
+-
+-After creating:
+-
+-```text
+-                 YOUR ROOM IS READY
+-
+-                       7K4P
+-
+-                Share this code
+-                   with friends
+-
+-                  ● Colin
+-                  ● Maya
+-                  ● James
+-                  ● Sarah
+-
+-                  [ START GAME ]
+-```
+-
+-The experience should communicate the product's core promise without requiring documentation.
+-
+----
+-
+-# 40. Performance Targets
+-
+-Initial targets:
+-
+-- Fast initial page load
+-- Responsive interactions
+-- Near-immediate room updates
+-- Minimal unnecessary network traffic
+-- Fast game-action acknowledgement under normal network conditions
+-- Graceful behavior on slower mobile connections
+-
+-The server should be capable of supporting multiple simultaneous rooms without blocking one room's game loop on another.
+-
+----
+-
+-# 41. Browser Support
+-
+-Target current versions of:
+-
+-- Chrome
+-- Safari
+-- Firefox
+-- Edge
+-
+-Primary emphasis:
+-
+-- iOS Safari
+-- Android Chrome
+-- Desktop Chrome
+-- Desktop Safari
+-- Desktop Edge
+-
+----
+-
+-# 42. Configuration
+-
+-Sensitive configuration must never be committed to source control.
+-
+-Example:
+-
+-```text
+-DATABASE_URL=
+-SERVER_HOST=
+-SERVER_PORT=
+-WEBSOCKET_PORT=
+-LOG_LEVEL=
+-```
+-
+-Production secrets must be stored securely.
+-
+----
+-
+-# 43. Deployment Architecture
+-
+-Initial deployment may use a single C++ server:
+-
+-```text
+-Internet
+-   │
+-   ▼
+-HTTPS / WSS
+-   │
+-   ▼
+-C++ Whosin Server
+-   │
+-   ▼
+-PostgreSQL
+-```
+-
+-As demand grows:
+-
+-```text
+-Internet
+-   │
+-   ▼
+-Load Balancer
+-   │
+-   ├── C++ Server
+-   ├── C++ Server
+-   └── C++ Server
+-           │
+-           ▼
+-         Redis
+-           │
+-           ▼
+-       PostgreSQL
+-```
+-
+-Redis should only become part of the production architecture when horizontal scaling requires shared real-time state or Pub/Sub.
+-
+----
+-
+-# 44. Success Metrics
+-
+-Important product metrics include:
+-
+-```text
+-Games created
+-Games started
+-Games completed
+-Average players per room
+-Average rounds per game
+-Replay rate
+-Join success rate
+-Connection failure rate
+-Average session duration
+-```
+-
+-A particularly useful metric is:
+-
+-> **Percentage of completed games that result in another game being started.**
+-
+-This measures whether the core experience naturally creates another round of play.
+-
+----
+-
+-# 45. Final Architecture Principle
+-
+-The most important architectural rule is:
+-
+-> **The browser renders Whosin. The C++ server owns Whosin.**
+-
+-The browser is responsible for:
+-
+-- Presentation
+-- Input
+-- Interaction
+-- Displaying synchronized state
+-
+-The server is responsible for:
+-
+-- Truth
+-- Rules
+-- State
+-- Timing
+-- Validation
+-- Scoring
+-- Permissions
+-- Multiplayer synchronization
+-
+----
+-
+-# 46. Build Order
+-
+-Development will proceed in this order:
+-
+-```text
+-1. Git / repository foundation
+-2. CMake project
+-3. C++ server foundation
+-4. Basic HTTP server
+-5. Web client foundation
+-6. WebSocket communication
+-7. Room creation
+-8. Room joining
+-9. Lobby
+-10. Host controls
+-11. Game engine
+-12. First playable game
+-13. Scoring/results
+-14. Replay
+-15. Reconnection
+-16. Error handling
+-17. PostgreSQL
+-18. Responsive/mobile polish
+-19. Accessibility
+-20. Testing
+-21. Production deployment
+-22. Monitoring
+-23. Public launch
+-```
+-
+-We will not build every subsystem simultaneously.
+-
+-Each phase should produce a working, testable result before the next major subsystem is introduced.
+-
+----
+-
+-# 47. First Build Milestone
+-
+-The first meaningful multiplayer milestone is:
+-
+-> **Three people on three different devices can open the public Whosin URL, enter the same room using a four-character code, see one another appear instantly, start a game, play a complete round, receive the same result, and immediately play another round.**
+-
+-Everything else is secondary to proving this loop.
+-
+----
+-
+-# 48. Project Status
+-
+-**Product:** Whosin
+-
+-**Tagline:** Who’s in? Let’s play.
+-
+-**Stage:** Pre-build specification
+-
+-**MVP:** Room-based real-time multiplayer web game
+-
+-**Authentication:** None
+-
+-**Installation:** None
+-
+-**Frontend:** HTML + CSS + JavaScript
+-
+-**Backend:** C++20
+-
+-**Networking:** HTTP + WebSocket
+-
+-**Build System:** CMake
+-
+-**Database:** PostgreSQL
+-
+-**Distributed State:** Redis when required for scaling
+-
+-**Primary Devices:** Mobile + desktop browsers
++## Scope and next improvements
+ 
+-**Core Principle:** Server-authoritative multiplayer state
++The playable MVP is deployed and cross-device play has been verified. Launch
++hardening must be built and deployed before its safeguards apply to the live site.
++This is suitable for a small-group release, not a claim of unlimited capacity.
++Large-scale load testing, external uptime alerts, durable game history and
++horizontal scaling remain separate operational or future work.
+ 
+-**Primary Success Condition:** A group can join and start playing with almost zero friction.
++Names, scores and session identities are temporary. Whosin does not request
++email, location, camera or microphone access. Hosting-provider logs are governed
++by the provider's retention policy. Do not use display names to share personal data.
+diff --git a/docs/OPERATIONS.md b/docs/OPERATIONS.md
+new file mode 100644
+index 0000000..bcef178
+--- /dev/null
++++ b/docs/OPERATIONS.md
+@@ -0,0 +1,53 @@
++# Whosin operations
++
++## Release checklist
++
++1. Build on Windows and commit/push the tested change to `main`.
++2. Wait for Render to show the new deployment as Live.
++3. Check `/health`, create/join, a complete game and replay from two devices.
++4. Refresh both devices after updates. The session-token update requires rejoining;
++   pre-update sessions have no private token. Redeployments clear active rooms.
++
++## Monitoring
++
++Render's health check must be `/health`. Its service logs contain a line every
++minute: `Whosin metrics: rooms=... requests=... errors=...`.
++Request and error counts cover that minute; rooms is the current count.
++Health traffic is counted but exempt from rate limits. Metrics are process-local.
++
++Watch for repeated crashes, build errors, sustained HTTP errors, or room counts
++near 100. A health response confirms process availability, not gameplay correctness.
++Configure an external uptime monitor for the public `/health` URL if you want
++notifications. No external alerting account has been provisioned by this change.
++Free-hosting sleep can trigger alerts and may be shortened by monitoring traffic;
++choose a monitoring policy that matches your hosting plan.
++
++## Limits
++
++The HTTP budget is per directly connected peer per minute:
++600 total requests, 120 POST requests, and 20 room creations.
++Limits return HTTP 429 with `Retry-After: 60`; body validation returns 413.
++The limiter stores at most 2048 peers and discards expired entries.
++Behind Render's proxy a peer may represent several users, so budgets may be
++shared. Never blindly trust user-supplied `X-Forwarded-For`. A larger release
++should configure trusted-proxy identity or upstream rate limiting explicitly.
++
++Each room permits 12 players; the server permits 100 rooms and 512 sockets.
++WebSocket messages above 1 KiB or over 20 messages per second close the connection.
++POST bodies are checked after Crow receives them; this is application validation,
++not a transport-level upload limit. Use a reverse proxy for transport limits.
++
++## Incident response
++
++- Inspect Render logs and deployment status first.
++- If a release causes failures, redeploy the previous working commit via Render.
++- Restarting clears rooms and resolves process-local state; players must rejoin.
++- For abuse, use hosting/network controls as well as the application limits.
++- Never paste session tokens into logs, issues or screenshots.
++
++## Known boundaries
++
++Use one server instance. There is no database, durable metrics store, external
++alerting integration or automated load-test result. Display names are temporary;
++provider request logs may be retained separately. Review capacity and proxy
++configuration before promoting the game to a large public audience.
+diff --git a/src/main.cpp b/src/main.cpp
+index bfb7fa1..642b6f8 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -22,15 +22,26 @@ int main()
+     GameService games(rooms);
+     RoomUpdates updates;
+     PresenceService presence(rooms, games);
+-    crow::SimpleApp app;
++    WhosinApp app;
++    app.get_middleware<RequestGuard>().rooms = &rooms;
+ 
+     registerRoomRoutes(app, rooms, updates, presence);
+     registerGameRoutes(app, games, updates);
+-    registerWebRoutes(app, updates, presence);
+-    app.tick(std::chrono::seconds(1), [&presence, &games, &updates]()
++    registerWebRoutes(app, updates, presence, rooms);
++    auto lastReport = std::chrono::steady_clock::now();
++    app.tick(std::chrono::seconds(1), [&presence, &games, &updates, &rooms, &app, &lastReport]()
+     {
+         for (const auto &code : presence.sweep()) updates.publish(code);
+         for (const auto &code : games.sweep()) updates.publish(code);
++        const auto now = std::chrono::steady_clock::now();
++        if (now - lastReport >= std::chrono::minutes(1))
++        {
++            auto &guard = app.get_middleware<RequestGuard>();
++            std::clog << "Whosin metrics: rooms=" << rooms.roomCount()
++                      << " requests=" << guard.requests.exchange(0)
++                      << " errors=" << guard.errors.exchange(0) << "\n";
++            lastReport = now;
++        }
+     });
+ 
+     CROW_ROUTE(app, "/health")([]()
+@@ -42,6 +53,6 @@ int main()
+         return response;
+     });
+     std::cout << "Whosin starting on port " << port << "\n";
+-    app.bindaddr("0.0.0.0").port(port).multithreaded().run();
++    app.bindaddr("0.0.0.0").port(port).concurrency(4).run();
+     return 0;
+ }
+diff --git a/src/models/Player.h b/src/models/Player.h
+index f14b19a..4f9b4e6 100644
+--- a/src/models/Player.h
++++ b/src/models/Player.h
+@@ -6,4 +6,5 @@ struct Player
+ {
+   std::string id;
+   std::string name;
++  std::string token;
+ };
+\ No newline at end of file
+diff --git a/src/routes/GameRoutes.h b/src/routes/GameRoutes.h
+index 7e2d8fb..14b9e7a 100644
+--- a/src/routes/GameRoutes.h
++++ b/src/routes/GameRoutes.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include <crow.h>
++#include "../security/RequestGuard.h"
+ #include "../game/GameView.h"
+ #include "../services/GameService.h"
+ #include "../services/RoomUpdates.h"
+@@ -38,7 +39,7 @@ inline crow::response actionResponse(const GameActionResult &result,
+     return response;
+ }
+ 
+-inline void registerGameRoutes(crow::SimpleApp &app,
++inline void registerGameRoutes(WhosinApp &app,
+                               GameService &games, RoomUpdates &updates)
+ {
+     CROW_ROUTE(app, "/api/rooms/<string>/game").methods(crow::HTTPMethod::GET)(
+diff --git a/src/routes/RoomRoutes.h b/src/routes/RoomRoutes.h
+index 7ddbaf6..0ea6889 100644
+--- a/src/routes/RoomRoutes.h
++++ b/src/routes/RoomRoutes.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ 
+ #include <crow.h>
++#include "../security/RequestGuard.h"
+ #include "../services/RoomService.h"
+ #include "../services/RoomUpdates.h"
+ #include "../services/PresenceService.h"
+@@ -9,11 +10,13 @@
+ 
+ inline bool validName(const std::string &name)
+ {
++    for (const unsigned char character : name)
++        if (character < 32 || character == 127) return false;
+     return !name.empty() && name.size() <= 120 &&
+            name.find_first_not_of(" \t\r\n") != std::string::npos;
+ }
+ 
+-inline void registerRoomRoutes(crow::SimpleApp &app,
++inline void registerRoomRoutes(WhosinApp &app,
+                               RoomService &rooms, RoomUpdates &updates,
+                               PresenceService &presence)
+ {
+@@ -29,10 +32,13 @@ inline void registerRoomRoutes(crow::SimpleApp &app,
+             return crow::response(400, R"({"error":"Enter a valid host name"})");
+         Player host;
+         const auto code = rooms.createRoom(name, host);
++        if (code.empty())
++            return crow::response(503, R"({"error":"Server is full. Try again later."})");
+         presence.track(code, host.id);
+         crow::json::wvalue data;
+         data["roomCode"] = code;
+         data["playerId"] = host.id;
++        data["sessionToken"] = host.token;
+         data["playerName"] = host.name;
+         data["isHost"] = true;
+         return crow::response{data};
+@@ -97,11 +103,14 @@ inline void registerRoomRoutes(crow::SimpleApp &app,
+             return crow::response(404, R"({"error":"Room not found"})");
+         if (result == JoinRoomResult::GameAlreadyStarted)
+             return crow::response(409, R"({"error":"Game has already started"})");
++        if (result == JoinRoomResult::RoomFull)
++            return crow::response(409, R"({"error":"That room is full (12 players)."})");
+         presence.track(code, player.id);
+         updates.publish(code);
+         crow::json::wvalue data;
+         data["roomCode"] = code;
+         data["playerId"] = player.id;
++        data["sessionToken"] = player.token;
+         data["playerName"] = player.name;
+         data["playerCount"] = count;
+         data["isHost"] = false;
+diff --git a/src/routes/WebRoutes.h b/src/routes/WebRoutes.h
+index ac74208..7d7045d 100644
+--- a/src/routes/WebRoutes.h
++++ b/src/routes/WebRoutes.h
+@@ -1,12 +1,15 @@
+ #pragma once
+ 
+ #include <crow.h>
++#include "../security/RequestGuard.h"
+ #include "../services/RoomUpdates.h"
+ #include "../services/PresenceService.h"
+ #include <string>
++#include <memory>
++#include "../security/SocketGuard.h"
+ 
+-inline void registerWebRoutes(crow::SimpleApp &app, RoomUpdates &updates,
+-                              PresenceService &presence)
++inline void registerWebRoutes(WhosinApp &app, RoomUpdates &updates,
++                              PresenceService &presence, RoomService &rooms)
+ {
+     CROW_ROUTE(app, "/")([]()
+     {
+@@ -16,21 +19,30 @@ inline void registerWebRoutes(crow::SimpleApp &app, RoomUpdates &updates,
+         return response;
+     });
+ 
++    auto sockets = std::make_shared<SocketGuard>();
+     CROW_WEBSOCKET_ROUTE(app, "/ws")
+-        .onopen([](crow::websocket::connection &connection)
++        .max_payload(1024)
++        .onopen([sockets](crow::websocket::connection &connection)
+         {
++            if (!sockets->open(reinterpret_cast<std::uintptr_t>(&connection)))
++            {
++                connection.close("Server is full");
++                return;
++            }
+             connection.send_text(R"({"type":"connected"})");
+         })
+-        .onclose([&updates, &presence](crow::websocket::connection &connection,
++        .onclose([&updates, &presence, sockets](crow::websocket::connection &connection,
+                            const std::string &, auto...)
+         {
++            sockets->close(reinterpret_cast<std::uintptr_t>(&connection));
+             updates.remove(connection);
+             presence.disconnect(reinterpret_cast<PresenceService::SocketId>(&connection));
+         })
+-        .onmessage([&updates, &presence](crow::websocket::connection &connection,
++        .onmessage([&updates, &presence, &rooms, sockets](crow::websocket::connection &connection,
+                              const std::string &message, bool isBinary)
+         {
+-            if (isBinary || message.size() > 1024)
++            if (!sockets->message(reinterpret_cast<std::uintptr_t>(&connection)) ||
++                isBinary || message.size() > 1024)
+             {
+                 connection.close("Invalid message");
+                 return;
+@@ -39,6 +51,15 @@ inline void registerWebRoutes(crow::SimpleApp &app, RoomUpdates &updates,
+             if (!body || !body.has("type") ||
+                 body["type"].t() != crow::json::type::String) return;
+             const std::string type = body["type"].s();
++            if ((type == "watch" || (type == "ping" && body.has("roomCode"))) &&
++                (!body.has("sessionToken") || body["sessionToken"].t() != crow::json::type::String ||
++                 !body.has("roomCode") || body["roomCode"].t() != crow::json::type::String ||
++                 !body.has("playerId") || body["playerId"].t() != crow::json::type::String ||
++                 !rooms.authenticate(body["roomCode"].s(), body["playerId"].s(), body["sessionToken"].s())))
++            {
++                connection.close("Invalid session");
++                return;
++            }
+             if (type == "ping")
+             {
+                 const auto socket = reinterpret_cast<PresenceService::SocketId>(&connection);
+diff --git a/src/security/RateLimiter.h b/src/security/RateLimiter.h
+new file mode 100644
+index 0000000..c77a55e
+--- /dev/null
++++ b/src/security/RateLimiter.h
+@@ -0,0 +1,38 @@
++#pragma once
++#include <chrono>
++#include <mutex>
++#include <string>
++#include <unordered_map>
++
++class RateLimiter
++{
++public:
++    using Clock = std::chrono::steady_clock;
++    bool allow(const std::string &key, bool write, bool create,
++               Clock::time_point now = Clock::now())
++    {
++        std::lock_guard<std::mutex> lock(mutex_);
++        if (now >= cleanup_)
++        {
++            std::erase_if(entries_, [&](const auto &entry)
++            { return now - entry.second.started >= std::chrono::minutes(1); });
++            cleanup_ = now + std::chrono::seconds(10);
++        }
++        auto found = entries_.find(key);
++        if (found == entries_.end())
++        {
++            if (entries_.size() >= 2048) return false;
++            found = entries_.emplace(key, Entry{now}).first;
++        }
++        auto &entry = found->second;
++        if (now - entry.started >= std::chrono::minutes(1)) entry = Entry{now};
++        if (++entry.total > 600) return false;
++        if (write && ++entry.writes > 120) return false;
++        return !create || ++entry.creates <= 20;
++    }
++private:
++    struct Entry { Clock::time_point started; int total = 0, writes = 0, creates = 0; };
++    std::mutex mutex_;
++    std::unordered_map<std::string, Entry> entries_;
++    Clock::time_point cleanup_{};
++};
+diff --git a/src/security/RequestGuard.h b/src/security/RequestGuard.h
+new file mode 100644
+index 0000000..1fd136d
+--- /dev/null
++++ b/src/security/RequestGuard.h
+@@ -0,0 +1,64 @@
++#pragma once
++#include <crow.h>
++#include <atomic>
++#include "RateLimiter.h"
++#include "../services/RoomService.h"
++
++struct RequestGuard
++{
++    struct context {};
++    RoomService *rooms = nullptr;
++    RateLimiter limiter;
++    std::atomic<unsigned long> requests{0}, errors{0};
++    void before_handle(crow::request &request, crow::response &response, context &)
++    {
++        ++requests;
++        if (request.url == "/health") return;
++        const bool write = request.method == crow::HTTPMethod::POST;
++        if (request.body.size() > 4096)
++        {
++            response = crow::response(413, R"({"error":"Request is too large"})");
++            response.end();
++            return;
++        }
++        // Do not trust caller-supplied forwarding headers as client identity.
++        if (!limiter.allow(request.remote_ip_address, write, request.url == "/api/rooms" && write))
++        {
++            response = crow::response(429, R"({"error":"Too many requests. Please wait a minute."})");
++            response.add_header("Retry-After", "60");
++            response.end();
++            return;
++        }
++        const std::string prefix = "/api/rooms/";
++        if (!request.url.starts_with(prefix)) return;
++        const auto rest = request.url.substr(prefix.size());
++        const auto slash = rest.find('/');
++        const auto code = rest.substr(0, slash);
++        if (rest == code + "/join") return;
++        std::string id = request.get_header_value("X-Player-Id");
++        if (write)
++        {
++            const auto body = crow::json::load(request.body);
++            if (body && body.has("playerId") && body["playerId"].t() == crow::json::type::String)
++                id = body["playerId"].s();
++        }
++        if (!rooms || !rooms->authenticate(code, id, request.get_header_value("X-Session-Token")))
++        {
++            response = crow::response(403, R"({"error":"Your session ended. Rejoin the room."})");
++            response.end();
++        }
++    }
++    void after_handle(crow::request &, crow::response &response, context &)
++    {
++        if (response.code >= 400) ++errors;
++        response.add_header("X-Content-Type-Options", "nosniff");
++        response.add_header("X-Frame-Options", "DENY");
++        response.add_header("Referrer-Policy", "no-referrer");
++        response.add_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
++        response.add_header("Content-Security-Policy",
++            "default-src 'self'; script-src 'self'; style-src 'self'; "
++            "connect-src 'self' wss:; img-src 'self'; object-src 'none'; "
++            "base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
++    }
++};
++using WhosinApp = crow::App<RequestGuard>;
+diff --git a/src/security/SocketGuard.h b/src/security/SocketGuard.h
+new file mode 100644
+index 0000000..1a46d5d
+--- /dev/null
++++ b/src/security/SocketGuard.h
+@@ -0,0 +1,37 @@
++#pragma once
++#include <chrono>
++#include <cstdint>
++#include <mutex>
++#include <unordered_map>
++
++class SocketGuard
++{
++public:
++    using Clock = std::chrono::steady_clock;
++    bool open(std::uintptr_t id)
++    {
++        std::lock_guard<std::mutex> lock(mutex_);
++        if (sockets_.size() >= 512) return false;
++        sockets_[id] = {Clock::now(), 0};
++        return true;
++    }
++    bool message(std::uintptr_t id)
++    {
++        std::lock_guard<std::mutex> lock(mutex_);
++        auto found = sockets_.find(id);
++        if (found == sockets_.end()) return false;
++        auto &entry = found->second;
++        const auto now = Clock::now();
++        if (now - entry.started >= std::chrono::seconds(1)) entry = {now, 0};
++        return ++entry.count <= 20;
++    }
++    void close(std::uintptr_t id)
++    {
++        std::lock_guard<std::mutex> lock(mutex_);
++        sockets_.erase(id);
++    }
++private:
++    struct Entry { Clock::time_point started; int count; };
++    std::mutex mutex_;
++    std::unordered_map<std::uintptr_t, Entry> sockets_;
++};
+diff --git a/src/services/IdGenerator.cpp b/src/services/IdGenerator.cpp
+index f322fb9..df63b3e 100644
+--- a/src/services/IdGenerator.cpp
++++ b/src/services/IdGenerator.cpp
+@@ -9,8 +9,7 @@ namespace
+       std::size_t characterCount,
+       std::size_t length)
+   {
+-    static thread_local std::mt19937 generator{
+-        std::random_device{}()};
++    static thread_local std::random_device generator;
+ 
+     std::uniform_int_distribution<std::size_t> distribution(
+         0,
+diff --git a/src/services/RoomService.cpp b/src/services/RoomService.cpp
+index 4c071a7..1bf6b6a 100644
+--- a/src/services/RoomService.cpp
++++ b/src/services/RoomService.cpp
+@@ -19,13 +19,14 @@ std::string RoomService::createRoom(
+ {
+   std::lock_guard<std::mutex> lock(roomsMutex);
+ 
++  if (rooms.size() >= 100) return {};
+   std::string code;
+   do
+   {
+     code = IdGenerator::roomCode();
+   } while (rooms.contains(code));
+ 
+-  host = Player{IdGenerator::playerId(), hostName};
++  host = Player{IdGenerator::playerId(), hostName, IdGenerator::playerId() + IdGenerator::playerId()};
+ 
+   Room room;
+   room.code = code;
+@@ -54,6 +55,7 @@ JoinRoomResult RoomService::addPlayer(
+   if (room.status != GameStatus::Waiting)
+     return JoinRoomResult::GameAlreadyStarted;
+ 
++  if (room.players.size() >= 12) return JoinRoomResult::RoomFull;
+   std::string id;
+   bool duplicate;
+ 
+@@ -72,7 +74,7 @@ JoinRoomResult RoomService::addPlayer(
+     }
+   } while (duplicate);
+ 
+-  player = Player{id, playerName};
++  player = Player{id, playerName, IdGenerator::playerId() + IdGenerator::playerId()};
+   room.players.push_back(player);
+ 
+   playerCount = static_cast<int>(room.players.size());
+@@ -144,3 +146,21 @@ bool RoomService::removePlayer(
+ }
+ 
+ 
++
++bool RoomService::authenticate(const std::string &code, const std::string &id,
++                               const std::string &token)
++{
++  if (token.size() != 32 || id.size() != 16) return false;
++  std::lock_guard<std::mutex> lock(roomsMutex);
++  const auto found = rooms.find(code);
++  if (found == rooms.end()) return false;
++  for (const auto &player : found->second.players)
++    if (player.id == id && player.token == token) return true;
++  return false;
++}
++
++std::size_t RoomService::roomCount()
++{
++  std::lock_guard<std::mutex> lock(roomsMutex);
++  return rooms.size();
++}
+diff --git a/src/services/RoomService.h b/src/services/RoomService.h
+index a864921..2a9f6e1 100644
+--- a/src/services/RoomService.h
++++ b/src/services/RoomService.h
+@@ -17,12 +17,15 @@ enum class JoinRoomResult
+ {
+     Success,
+     RoomNotFound,
+-    GameAlreadyStarted
++    GameAlreadyStarted,
++    RoomFull
+ };
+ 
+ class RoomService
+ {
+ public:
++    bool authenticate(const std::string &code, const std::string &id, const std::string &token);
++    std::size_t roomCount();
+     bool removePlayer(const std::string &code, const std::string &playerId, Room &room);
+ 
+     void setStatus(const std::string &roomCode, GameStatus status);
+diff --git a/static/api.js b/static/api.js
+index dbd7c90..4c1903f 100644
+--- a/static/api.js
++++ b/static/api.js
+@@ -13,6 +13,11 @@ window.whosin = {
+       options.headers = { "Content-Type": "application/json" };
+       options.body = JSON.stringify(body);
+     }
++    if (window.whosin.session) {
++      options.headers = { ...options.headers,
++        "X-Player-Id": window.whosin.session.playerId,
++        "X-Session-Token": window.whosin.session.sessionToken };
++    }
+     try {
+       const response = await fetch(path, options);
+       const data = await response.json();
+diff --git a/static/app.js b/static/app.js
+index cb80751..11d51e7 100644
+--- a/static/app.js
++++ b/static/app.js
+@@ -14,14 +14,16 @@
+   }
+ 
+   function saveSession(data) {
+-    session = { roomCode: data.roomCode, playerId: data.playerId };
++    session = { roomCode: data.roomCode, playerId: data.playerId, sessionToken: data.sessionToken };
++    window.whosin.session = session;
+     try { sessionStorage.setItem(sessionKey, JSON.stringify(session)); }
+     catch { /* The page can work without storage. */ }
+-    window.whosinLive.watch(session.roomCode, session.playerId);
++    window.whosinLive.watch(session.roomCode, session.playerId, session.sessionToken);
+   }
+ 
+   function clearSession() {
+     session = null;
++    window.whosin.session = null;
+     window.whosinLive.watch(null);
+     try { sessionStorage.removeItem(sessionKey); }
+     catch { /* Storage may be unavailable. */ }
+@@ -70,7 +72,7 @@
+         renderRoom(room);
+       } catch (error) {
+         if (active !== session) continue;
+-        if (error.status === 404) clearSession();
++        if (error.status === 404 || error.status === 403) clearSession();
+         message(error.status === 404 ? "That room is no longer available."
+           : "Cannot load the room. Check your connection or refresh the page.");
+       }
+@@ -144,11 +146,14 @@
+   try {
+     const saved = JSON.parse(sessionStorage.getItem(sessionKey));
+     if (saved && typeof saved.roomCode === "string" &&
+-        typeof saved.playerId === "string") session = saved;
++        typeof saved.playerId === "string" && typeof saved.sessionToken === "string") {
++      session = saved;
++      window.whosin.session = session;
++    }
+   } catch { clearSession(); }
+   if (session) {
+     element("entry").hidden = true;
+-    window.whosinLive.watch(session.roomCode, session.playerId);
++    window.whosinLive.watch(session.roomCode, session.playerId, session.sessionToken);
+     refreshRoom();
+   }
+ })();
+diff --git a/static/index.html b/static/index.html
+index a2183f1..aa0a6a5 100644
+--- a/static/index.html
++++ b/static/index.html
+@@ -4,13 +4,13 @@
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+   <title>Whosin — Who's in? Let's play.</title>
+-  <link rel="stylesheet" href="/static/styles.css?v=7">
+-  <script src="/static/api.js?v=7" defer></script>
+-  <script src="/static/websocket.js?v=7" defer></script>
+-  <script src="/static/game-view.js?v=7" defer></script>
+-  <script src="/static/timer.js?v=7" defer></script>
+-  <script src="/static/game.js?v=7" defer></script>
+-  <script src="/static/app.js?v=7" defer></script>
++  <link rel="stylesheet" href="/static/styles.css?v=8">
++  <script src="/static/api.js?v=8" defer></script>
++  <script src="/static/websocket.js?v=8" defer></script>
++  <script src="/static/game-view.js?v=8" defer></script>
++  <script src="/static/timer.js?v=8" defer></script>
++  <script src="/static/game.js?v=8" defer></script>
++  <script src="/static/app.js?v=8" defer></script>
+ </head>
+ <body>
+   <main>
+diff --git a/static/websocket.js b/static/websocket.js
+index ef73170..d1337e7 100644
+--- a/static/websocket.js
++++ b/static/websocket.js
+@@ -6,6 +6,7 @@
+   let heartbeatTimer = null;
+   let watchedRoom = null;
+   let watchedPlayer = null;
++  let watchedToken = null;
+   let lastReply = 0;
+   let stopped = false;
+   const status = document.getElementById("connection-status");
+@@ -13,13 +14,14 @@
+   function subscribe() {
+     if (socket?.readyState !== WebSocket.OPEN) return;
+     socket.send(JSON.stringify(watchedRoom
+-      ? { type: "watch", roomCode: watchedRoom, playerId: watchedPlayer }
++      ? { type: "watch", roomCode: watchedRoom, playerId: watchedPlayer, sessionToken: watchedToken }
+       : { type: "unwatch" }));
+   }
+   window.whosinLive = {
+-    watch(roomCode, playerId) {
++    watch(roomCode, playerId, sessionToken) {
+       watchedRoom = roomCode || null;
+       watchedPlayer = playerId || null;
++      watchedToken = sessionToken || null;
+       subscribe();
+     }
+   };
+@@ -46,7 +48,7 @@
+           return;
+         }
+         connection.send(JSON.stringify(watchedRoom
+-          ? { type: "ping", roomCode: watchedRoom, playerId: watchedPlayer }
++          ? { type: "ping", roomCode: watchedRoom, playerId: watchedPlayer, sessionToken: watchedToken }
+           : { type: "ping" }));
+       }, 15000);
+     });
+diff --git a/tests/launch_smoke.py b/tests/launch_smoke.py
+new file mode 100644
+index 0000000..05136b8
+--- /dev/null
++++ b/tests/launch_smoke.py
+@@ -0,0 +1,113 @@
++"""Run against a local Whosin binary, from the repository root."""
++import asyncio
++import json
++import os
++import subprocess
++import sys
++import time
++import urllib.error
++import urllib.request
++
++BASE = "http://127.0.0.1:19081"
++
++
++def request(path, body=None, session=None):
++    headers = {"Content-Type": "application/json"}
++    if session:
++        headers.update({"X-Player-Id": session["playerId"],
++                        "X-Session-Token": session["sessionToken"]})
++    data = json.dumps(body).encode() if body is not None else None
++    req = urllib.request.Request(BASE + path, data=data, headers=headers)
++    try:
++        result = urllib.request.urlopen(req, timeout=5)
++    except urllib.error.HTTPError as error:
++        result = error
++    with result:
++        return result.status, json.load(result), result.headers
++
++
++async def checks():
++    import websockets
++    status, host, headers = request("/api/rooms", {"name": "Colin"})
++    assert status == 200 and len(host["sessionToken"]) == 32
++    assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
++    path = "/api/rooms/" + host["roomCode"]
++    status, guest, _ = request(path + "/join", {"name": "Guest"})
++    assert status == 200 and guest["sessionToken"] != host["sessionToken"]
++    assert request(path)[0] == 403
++    assert request(path + "/start", {"playerId": host["playerId"]})[0] == 403
++    forged = {**guest, "playerId": host["playerId"]}
++    assert request(path + "/start", {"playerId": host["playerId"]}, forged)[0] == 403
++    assert request(path + "/start", {"playerId": guest["playerId"]}, guest)[0] == 403
++    room = request(path, session=host)[1]
++    assert all("token" not in p and "sessionToken" not in p for p in room["players"])
++    assert request("/api/rooms", {"name": "x" * 5000})[0] == 413
++    url = "ws://127.0.0.1:19081/ws"
++    async with websockets.connect(url) as hs, websockets.connect(url) as gs:
++        for socket, session in [(hs, host), (gs, guest)]:
++            assert json.loads(await socket.recv())["type"] == "connected"
++            await socket.send(json.dumps({"type": "watch", **session}))
++            await socket.send(json.dumps({"type": "ping", **session}))
++            # A watch also publishes room.updated; consume until pong.
++            while json.loads(await asyncio.wait_for(socket.recv(), 3))["type"] != "pong":
++                pass
++        assert request(path + "/start", {"playerId": host["playerId"]}, host)[0] == 200
++        first_questions = []
++        for round_number in range(1, 6):
++            state = request(path + "/game", session=host)[1]
++            first_questions.append(state["question"])
++            assert "correctAnswer" not in state
++            for session in [host, guest]:
++                assert request(path + "/answer", {"playerId": session["playerId"],
++                    "round": round_number, "generation": 1, "answer": 0}, session)[0] == 200
++            state = request(path + "/game", session=guest)[1]
++            assert state["phase"] == "result" and "correctAnswer" in state
++            assert all("token" not in p for p in state["players"])
++            assert request(path + "/next", {"playerId": host["playerId"],
++                "round": round_number, "generation": 1}, host)[0] == 200
++        assert request(path + "/game", session=host)[1]["phase"] == "finished"
++        assert request(path + "/replay", {"playerId": host["playerId"],
++            "generation": 1}, host)[0] == 200
++        replay = request(path + "/game", session=host)[1]
++        assert replay["generation"] == 2 and replay["question"] not in first_questions
++        assert all(p["score"] == 0 for p in replay["players"])
++        assert request(path + "/answer", {"playerId": host["playerId"],
++            "round": 1, "generation": 1, "answer": 0}, host)[0] == 409
++        # Forged WebSocket identity is rejected without keeping a player present.
++        async with websockets.connect(url) as bad:
++            await bad.recv()
++            await bad.send(json.dumps({"type": "watch", **forged}))
++            try:
++                await asyncio.wait_for(bad.recv(), 3)
++                raise AssertionError("Forged websocket accepted")
++            except websockets.exceptions.ConnectionClosed:
++                pass
++        assert request(path + "/leave", {"playerId": host["playerId"]}, host)[0] == 200
++        assert request(path, session=guest)[1]["hostId"] == guest["playerId"]
++        assert request(path + "/leave", {"playerId": guest["playerId"]}, guest)[0] == 200
++    for _ in range(650):
++        status, _, headers = request("/api/rooms/ABC234")
++        if status == 429:
++            assert headers["Retry-After"] == "60"
++            break
++    else:
++        raise AssertionError("Rate limit missing")
++    assert request("/health")[0] == 200
++
++
++if __name__ == "__main__":
++    process = subprocess.Popen([os.path.abspath(sys.argv[1])],
++        env={**os.environ, "PORT": "19081"},
++        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
++    try:
++        for _ in range(50):
++            try:
++                assert request("/health")[0] == 200
++                break
++            except OSError:
++                time.sleep(0.1)
++        asyncio.run(checks())
++        print("Launch smoke checks passed")
++    finally:
++        process.terminate()
++        process.wait(timeout=10)
+diff --git a/tests/room_limits.cpp b/tests/room_limits.cpp
+new file mode 100644
+index 0000000..c934b23
+--- /dev/null
++++ b/tests/room_limits.cpp
+@@ -0,0 +1,30 @@
++#include "../src/services/RoomService.h"
++#include <cassert>
++
++int main()
++{
++    RoomService rooms;
++    Player host;
++    const auto code = rooms.createRoom("Host", host);
++    assert(rooms.authenticate(code, host.id, host.token));
++    assert(!rooms.authenticate(code, host.id, ""));
++    assert(!rooms.authenticate(code, host.id, std::string(32, 'x')));
++    int count = 0;
++    for (int i = 0; i < 11; ++i)
++    {
++        Player guest;
++        assert(rooms.addPlayer(code, "Guest", guest, count) == JoinRoomResult::Success);
++        assert(rooms.authenticate(code, guest.id, guest.token));
++        assert(!rooms.authenticate(code, host.id, guest.token));
++    }
++    Player extra;
++    assert(count == 12);
++    assert(rooms.addPlayer(code, "Extra", extra, count) == JoinRoomResult::RoomFull);
++    for (int i = 1; i < 100; ++i) assert(!rooms.createRoom("Host", extra).empty());
++    assert(rooms.roomCount() == 100);
++    assert(rooms.createRoom("Overflow", extra).empty());
++    Room snapshot;
++    assert(rooms.removePlayer(code, host.id, snapshot));
++    assert(!rooms.authenticate(code, host.id, host.token));
++    assert(rooms.addPlayer(code, "Replacement", extra, count) == JoinRoomResult::Success);
++}
+diff --git a/tests/security_limits.cpp b/tests/security_limits.cpp
+new file mode 100644
+index 0000000..0ee7c0a
+--- /dev/null
++++ b/tests/security_limits.cpp
+@@ -0,0 +1,26 @@
++#include "../src/security/RateLimiter.h"
++#include "../src/security/SocketGuard.h"
++#include <cassert>
++
++int main()
++{
++    const auto now = RateLimiter::Clock::now();
++    RateLimiter limiter;
++    for (int i = 0; i < 20; ++i) assert(limiter.allow("creator", true, true, now));
++    assert(!limiter.allow("creator", true, true, now));
++    assert(limiter.allow("creator", true, true, now + std::chrono::minutes(1)));
++    for (int i = 0; i < 120; ++i) assert(limiter.allow("writer", true, false, now));
++    assert(!limiter.allow("writer", true, false, now));
++    for (int i = 0; i < 600; ++i) assert(limiter.allow("reader", false, false, now));
++    assert(!limiter.allow("reader", false, false, now));
++    SocketGuard sockets;
++    assert(sockets.open(1));
++    for (int i = 0; i < 20; ++i) assert(sockets.message(1));
++    assert(!sockets.message(1));
++    sockets.close(1);
++    assert(!sockets.message(1));
++    for (int i = 1; i <= 512; ++i) assert(sockets.open(i));
++    assert(!sockets.open(513));
++    sockets.close(1);
++    assert(sockets.open(513));
++}
+-- 
+2.51.1
+
