@@ -19,13 +19,14 @@ std::string RoomService::createRoom(
 {
   std::lock_guard<std::mutex> lock(roomsMutex);
 
+  if (rooms.size() >= 100) return {};
   std::string code;
   do
   {
     code = IdGenerator::roomCode();
   } while (rooms.contains(code));
 
-  host = Player{IdGenerator::playerId(), hostName};
+  host = Player{IdGenerator::playerId(), hostName, IdGenerator::playerId() + IdGenerator::playerId()};
 
   Room room;
   room.code = code;
@@ -54,6 +55,7 @@ JoinRoomResult RoomService::addPlayer(
   if (room.status != GameStatus::Waiting)
     return JoinRoomResult::GameAlreadyStarted;
 
+  if (room.players.size() >= 12) return JoinRoomResult::RoomFull;
   std::string id;
   bool duplicate;
 
@@ -72,7 +74,7 @@ JoinRoomResult RoomService::addPlayer(
     }
   } while (duplicate);
 
-  player = Player{id, playerName};
+  player = Player{id, playerName, IdGenerator::playerId() + IdGenerator::playerId()};
   room.players.push_back(player);
 
   playerCount = static_cast<int>(room.players.size());
@@ -144,3 +146,21 @@ bool RoomService::removePlayer(
 }
 
 
+
+bool RoomService::authenticate(const std::string &code, const std::string &id,
+                               const std::string &token)
+{
+  if (token.size() != 32 || id.size() != 16) return false;
+  std::lock_guard<std::mutex> lock(roomsMutex);
+  const auto found = rooms.find(code);
+  if (found == rooms.end()) return false;
+  for (const auto &player : found->second.players)
+    if (player.id == id && player.token == token) return true;
+  return false;
+}
+
+std::size_t RoomService::roomCount()
+{
+  std::lock_guard<std::mutex> lock(roomsMutex);
+  return rooms.size();
+}

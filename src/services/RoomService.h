@@ -17,12 +17,15 @@ enum class JoinRoomResult
 {
     Success,
     RoomNotFound,
-    GameAlreadyStarted
+    GameAlreadyStarted,
+    RoomFull
 };
 
 class RoomService
 {
 public:
+    bool authenticate(const std::string &code, const std::string &id, const std::string &token);
+    std::size_t roomCount();
     bool removePlayer(const std::string &code, const std::string &playerId, Room &room);
 
     void setStatus(const std::string &roomCode, GameStatus status);

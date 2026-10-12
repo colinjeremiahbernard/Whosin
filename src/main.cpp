@@ -22,15 +22,26 @@ int main()
     GameService games(rooms);
     RoomUpdates updates;
     PresenceService presence(rooms, games);
-    crow::SimpleApp app;
+    WhosinApp app;
+    app.get_middleware<RequestGuard>().rooms = &rooms;
 
     registerRoomRoutes(app, rooms, updates, presence);
     registerGameRoutes(app, games, updates);
-    registerWebRoutes(app, updates, presence);
-    app.tick(std::chrono::seconds(1), [&presence, &games, &updates]()
+    registerWebRoutes(app, updates, presence, rooms);
+    auto lastReport = std::chrono::steady_clock::now();
+    app.tick(std::chrono::seconds(1), [&presence, &games, &updates, &rooms, &app, &lastReport]()
     {
         for (const auto &code : presence.sweep()) updates.publish(code);
         for (const auto &code : games.sweep()) updates.publish(code);
+        const auto now = std::chrono::steady_clock::now();
+        if (now - lastReport >= std::chrono::minutes(1))
+        {
+            auto &guard = app.get_middleware<RequestGuard>();
+            std::clog << "Whosin metrics: rooms=" << rooms.roomCount()
+                      << " requests=" << guard.requests.exchange(0)
+                      << " errors=" << guard.errors.exchange(0) << "\n";
+            lastReport = now;
+        }
     });
 
     CROW_ROUTE(app, "/health")([]()
@@ -42,6 +53,6 @@ int main()
         return response;
     });
     std::cout << "Whosin starting on port " << port << "\n";
-    app.bindaddr("0.0.0.0").port(port).multithreaded().run();
+    app.bindaddr("0.0.0.0").port(port).concurrency(4).run();
     return 0;
 }

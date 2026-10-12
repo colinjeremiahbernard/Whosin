@@ -9,8 +9,7 @@ namespace
       std::size_t characterCount,
       std::size_t length)
   {
-    static thread_local std::mt19937 generator{
-        std::random_device{}()};
+    static thread_local std::random_device generator;
 
     std::uniform_int_distribution<std::size_t> distribution(
         0,

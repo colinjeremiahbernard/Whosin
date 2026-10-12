@@ -6,6 +6,7 @@
   let heartbeatTimer = null;
   let watchedRoom = null;
   let watchedPlayer = null;
+  let watchedToken = null;
   let lastReply = 0;
   let stopped = false;
   const status = document.getElementById("connection-status");
@@ -13,13 +14,14 @@
   function subscribe() {
     if (socket?.readyState !== WebSocket.OPEN) return;
     socket.send(JSON.stringify(watchedRoom
-      ? { type: "watch", roomCode: watchedRoom, playerId: watchedPlayer }
+      ? { type: "watch", roomCode: watchedRoom, playerId: watchedPlayer, sessionToken: watchedToken }
       : { type: "unwatch" }));
   }
   window.whosinLive = {
-    watch(roomCode, playerId) {
+    watch(roomCode, playerId, sessionToken) {
       watchedRoom = roomCode || null;
       watchedPlayer = playerId || null;
+      watchedToken = sessionToken || null;
       subscribe();
     }
   };
@@ -46,7 +48,7 @@
           return;
         }
         connection.send(JSON.stringify(watchedRoom
-          ? { type: "ping", roomCode: watchedRoom, playerId: watchedPlayer }
+          ? { type: "ping", roomCode: watchedRoom, playerId: watchedPlayer, sessionToken: watchedToken }
           : { type: "ping" }));
       }, 15000);
     });

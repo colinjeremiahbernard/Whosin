@@ -14,14 +14,16 @@
   }
 
   function saveSession(data) {
-    session = { roomCode: data.roomCode, playerId: data.playerId };
+    session = { roomCode: data.roomCode, playerId: data.playerId, sessionToken: data.sessionToken };
+    window.whosin.session = session;
     try { sessionStorage.setItem(sessionKey, JSON.stringify(session)); }
     catch { /* The page can work without storage. */ }
-    window.whosinLive.watch(session.roomCode, session.playerId);
+    window.whosinLive.watch(session.roomCode, session.playerId, session.sessionToken);
   }
 
   function clearSession() {
     session = null;
+    window.whosin.session = null;
     window.whosinLive.watch(null);
     try { sessionStorage.removeItem(sessionKey); }
     catch { /* Storage may be unavailable. */ }
@@ -70,7 +72,7 @@
         renderRoom(room);
       } catch (error) {
         if (active !== session) continue;
-        if (error.status === 404) clearSession();
+        if (error.status === 404 || error.status === 403) clearSession();
         message(error.status === 404 ? "That room is no longer available."
           : "Cannot load the room. Check your connection or refresh the page.");
       }
@@ -144,11 +146,14 @@
   try {
     const saved = JSON.parse(sessionStorage.getItem(sessionKey));
     if (saved && typeof saved.roomCode === "string" &&
-        typeof saved.playerId === "string") session = saved;
+        typeof saved.playerId === "string" && typeof saved.sessionToken === "string") {
+      session = saved;
+      window.whosin.session = session;
+    }
   } catch { clearSession(); }
   if (session) {
     element("entry").hidden = true;
-    window.whosinLive.watch(session.roomCode, session.playerId);
+    window.whosinLive.watch(session.roomCode, session.playerId, session.sessionToken);
     refreshRoom();
   }
 })();

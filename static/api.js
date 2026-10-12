@@ -13,6 +13,11 @@ window.whosin = {
       options.headers = { "Content-Type": "application/json" };
       options.body = JSON.stringify(body);
     }
+    if (window.whosin.session) {
+      options.headers = { ...options.headers,
+        "X-Player-Id": window.whosin.session.playerId,
+        "X-Session-Token": window.whosin.session.sessionToken };
+    }
     try {
       const response = await fetch(path, options);
       const data = await response.json();

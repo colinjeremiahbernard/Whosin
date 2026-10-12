@@ -1,12 +1,15 @@
 #pragma once
 
 #include <crow.h>
+#include "../security/RequestGuard.h"
 #include "../services/RoomUpdates.h"
 #include "../services/PresenceService.h"
 #include <string>
+#include <memory>
+#include "../security/SocketGuard.h"
 
-inline void registerWebRoutes(crow::SimpleApp &app, RoomUpdates &updates,
-                              PresenceService &presence)
+inline void registerWebRoutes(WhosinApp &app, RoomUpdates &updates,
+                              PresenceService &presence, RoomService &rooms)
 {
     CROW_ROUTE(app, "/")([]()
     {
@@ -16,21 +19,30 @@ inline void registerWebRoutes(crow::SimpleApp &app, RoomUpdates &updates,
         return response;
     });
 
+    auto sockets = std::make_shared<SocketGuard>();
     CROW_WEBSOCKET_ROUTE(app, "/ws")
-        .onopen([](crow::websocket::connection &connection)
+        .max_payload(1024)
+        .onopen([sockets](crow::websocket::connection &connection)
         {
+            if (!sockets->open(reinterpret_cast<std::uintptr_t>(&connection)))
+            {
+                connection.close("Server is full");
+                return;
+            }
             connection.send_text(R"({"type":"connected"})");
         })
-        .onclose([&updates, &presence](crow::websocket::connection &connection,
+        .onclose([&updates, &presence, sockets](crow::websocket::connection &connection,
                            const std::string &, auto...)
         {
+            sockets->close(reinterpret_cast<std::uintptr_t>(&connection));
             updates.remove(connection);
             presence.disconnect(reinterpret_cast<PresenceService::SocketId>(&connection));
         })
-        .onmessage([&updates, &presence](crow::websocket::connection &connection,
+        .onmessage([&updates, &presence, &rooms, sockets](crow::websocket::connection &connection,
                              const std::string &message, bool isBinary)
         {
-            if (isBinary || message.size() > 1024)
+            if (!sockets->message(reinterpret_cast<std::uintptr_t>(&connection)) ||
+                isBinary || message.size() > 1024)
             {
                 connection.close("Invalid message");
                 return;
@@ -39,6 +51,15 @@ inline void registerWebRoutes(crow::SimpleApp &app, RoomUpdates &updates,
             if (!body || !body.has("type") ||
                 body["type"].t() != crow::json::type::String) return;
             const std::string type = body["type"].s();
+            if ((type == "watch" || (type == "ping" && body.has("roomCode"))) &&
+                (!body.has("sessionToken") || body["sessionToken"].t() != crow::json::type::String ||
+                 !body.has("roomCode") || body["roomCode"].t() != crow::json::type::String ||
+                 !body.has("playerId") || body["playerId"].t() != crow::json::type::String ||
+                 !rooms.authenticate(body["roomCode"].s(), body["playerId"].s(), body["sessionToken"].s())))
+            {
+                connection.close("Invalid session");
+                return;
+            }
             if (type == "ping")
             {
                 const auto socket = reinterpret_cast<PresenceService::SocketId>(&connection);

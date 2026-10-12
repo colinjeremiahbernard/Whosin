@@ -1,6 +1,7 @@
 #pragma once
 
 #include <crow.h>
+#include "../security/RequestGuard.h"
 #include "../game/GameView.h"
 #include "../services/GameService.h"
 #include "../services/RoomUpdates.h"
@@ -38,7 +39,7 @@ inline crow::response actionResponse(const GameActionResult &result,
     return response;
 }
 
-inline void registerGameRoutes(crow::SimpleApp &app,
+inline void registerGameRoutes(WhosinApp &app,
                               GameService &games, RoomUpdates &updates)
 {
     CROW_ROUTE(app, "/api/rooms/<string>/game").methods(crow::HTTPMethod::GET)(

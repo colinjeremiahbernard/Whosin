@@ -1,6 +1,7 @@
 #pragma once
 
 #include <crow.h>
+#include "../security/RequestGuard.h"
 #include "../services/RoomService.h"
 #include "../services/RoomUpdates.h"
 #include "../services/PresenceService.h"
@@ -9,11 +10,13 @@
 
 inline bool validName(const std::string &name)
 {
+    for (const unsigned char character : name)
+        if (character < 32 || character == 127) return false;
     return !name.empty() && name.size() <= 120 &&
            name.find_first_not_of(" \t\r\n") != std::string::npos;
 }
 
-inline void registerRoomRoutes(crow::SimpleApp &app,
+inline void registerRoomRoutes(WhosinApp &app,
                               RoomService &rooms, RoomUpdates &updates,
                               PresenceService &presence)
 {
@@ -29,10 +32,13 @@ inline void registerRoomRoutes(crow::SimpleApp &app,
             return crow::response(400, R"({"error":"Enter a valid host name"})");
         Player host;
         const auto code = rooms.createRoom(name, host);
+        if (code.empty())
+            return crow::response(503, R"({"error":"Server is full. Try again later."})");
         presence.track(code, host.id);
         crow::json::wvalue data;
         data["roomCode"] = code;
         data["playerId"] = host.id;
+        data["sessionToken"] = host.token;
         data["playerName"] = host.name;
         data["isHost"] = true;
         return crow::response{data};
@@ -97,11 +103,14 @@ inline void registerRoomRoutes(crow::SimpleApp &app,
             return crow::response(404, R"({"error":"Room not found"})");
         if (result == JoinRoomResult::GameAlreadyStarted)
             return crow::response(409, R"({"error":"Game has already started"})");
+        if (result == JoinRoomResult::RoomFull)
+            return crow::response(409, R"({"error":"That room is full (12 players)."})");
         presence.track(code, player.id);
         updates.publish(code);
         crow::json::wvalue data;
         data["roomCode"] = code;
         data["playerId"] = player.id;
+        data["sessionToken"] = player.token;
         data["playerName"] = player.name;
         data["playerCount"] = count;
         data["isHost"] = false;
