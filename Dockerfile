@@ -1,9 +1,9 @@
 FROM ubuntu:24.04 AS build
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates cmake g++ git libasio-dev ninja-build \
+    ca-certificates cmake g++ git libasio-dev make ninja-build \
     && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --branch v1.3.2 https://github.com/CrowCpp/Crow.git /tmp/crow \
-    && cmake -S /tmp/crow -B /tmp/crow-build \
+    && cmake -S /tmp/crow -B /tmp/crow-build -G Ninja \
        -DCROW_BUILD_EXAMPLES=OFF -DCROW_BUILD_TESTS=OFF -DCROW_INSTALL=ON \
        -DCROW_ENABLE_SSL=OFF -DCROW_ENABLE_COMPRESSION=OFF \
     && cmake --install /tmp/crow-build
