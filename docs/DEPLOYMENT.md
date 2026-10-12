@@ -33,8 +33,42 @@ The hosting service or reverse proxy must provide HTTPS and forward WebSocket
 upgrade requests to `/ws`. The browser automatically uses WSS on HTTPS pages.
 Do not expose the server directly over plain HTTP for public play.
 
-This configuration prepares deployment; it does not provision hosting or a
-public URL. Rate limiting, monitoring, and public-launch security checks remain.
+## Deploying to Render (Free Tier)
+
+Render supports Docker web services on its Free tier with automatic HTTPS and WebSocket support:
+
+### Option A: 1-Click Blueprint (Recommended)
+1. Push `render.yaml` to your GitHub repository:
+   ```sh
+   git add render.yaml docs/DEPLOYMENT.md
+   git commit -m "Add Render Blueprint configuration"
+   git push origin main
+   ```
+2. Log in to [Render](https://dashboard.render.com).
+3. Click **New +** -> **Blueprint**.
+4. Select your `Whosin` repository.
+5. Render will detect `render.yaml`, set up the free Docker web service, configure the `/health` check path, and start the initial build.
+
+### Option B: Manual Web Service Setup
+1. Log in to [Render](https://dashboard.render.com).
+2. Click **New +** -> **Web Service**.
+3. Connect your `Whosin` GitHub repository (`https://github.com/colinjeremiahbernard/Whosin`).
+4. Fill in the following settings:
+   - **Name**: `whosin` (or your preferred service name)
+   - **Language / Environment**: `Docker`
+   - **Region**: Select closest to your players (e.g., Oregon, Ohio, Frankfurt)
+   - **Branch**: `main`
+   - **Instance Type / Plan**: **Free** ($0/month)
+5. Expand **Advanced**:
+   - **Health Check Path**: `/health`
+   - **Auto-Deploy**: `Yes`
+6. Click **Create Web Service**.
+
+### Free Tier Notes & Best Practices
+- **Spin Down on Idle**: Render's free instances spin down after 15 minutes of inactivity. When someone visits your URL, it will take ~30-50 seconds to wake up (cold start).
+- **In-Memory State**: Whosin stores room and player state in memory. When the instance spins down or restarts, active rooms are reset.
+- **Keep-Alive (Optional)**: If you are hosting a game session and want to prevent spindown, you can configure a free external ping monitor (like UptimeRobot) to ping `https://<your-service>.onrender.com/health` every 10 minutes.
+- **WebSocket & Port**: Render automatically exposes port `10000` via the `$PORT` environment variable and handles secure WSS (`/ws`) forwarding automatically.
 
 ## Windows development
 
