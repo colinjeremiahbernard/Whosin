@@ -7,9 +7,17 @@
 #include "routes/GameRoutes.h"
 #include "routes/WebRoutes.h"
 #include <iostream>
+#include "config/ServerConfig.h"
 
 int main()
 {
+    unsigned short port;
+    try { port = serverPort(); }
+    catch (const std::exception &error)
+    {
+        std::cerr << error.what() << "\n";
+        return 1;
+    }
     RoomService rooms;
     GameService games(rooms);
     RoomUpdates updates;
@@ -25,7 +33,15 @@ int main()
         for (const auto &code : games.sweep()) updates.publish(code);
     });
 
-    std::cout << "Whosin starting on http://localhost:8080\n";
-    app.port(8080).multithreaded().run();
+    CROW_ROUTE(app, "/health")([]()
+    {
+        crow::json::wvalue data;
+        data["status"] = "ok";
+        crow::response response{data};
+        response.add_header("Cache-Control", "no-store");
+        return response;
+    });
+    std::cout << "Whosin starting on port " << port << "\n";
+    app.bindaddr("0.0.0.0").port(port).multithreaded().run();
     return 0;
 }

@@ -1,0 +1,17 @@
+*
+!Dockerfile
+!CMakeLists.txt
+!src/
+!src/main.cpp
+!src/config/
+!src/config/**
+!src/game/
+!src/game/**
+!src/models/
+!src/models/**
+!src/routes/
+!src/routes/**
+!src/services/
+!src/services/**
+!static/
+!static/**
